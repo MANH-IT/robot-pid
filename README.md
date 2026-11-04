@@ -164,3 +164,7 @@ Quy trình chi tiết: [docs/calibration.md](docs/calibration.md).
 - Jetson Nano cần nguồn 5 V đủ dòng, không lấy từ chân 5 V của Blue Pill.
 - Khi hiệu chuẩn PID, kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực an toàn.
 - Luôn có nút dừng khẩn cấp vật lý cắt nguồn động cơ.
+
+## Giấy phép
+
+MIT. Xem [LICENSE](LICENSE).
