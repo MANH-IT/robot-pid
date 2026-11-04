@@ -1,0 +1,36 @@
+#ifndef ROBOT_CONFIG_H
+#define ROBOT_CONFIG_H
+
+#define ROBOT_CONTROL_PERIOD_MS 10u
+#define ROBOT_TELEMETRY_PERIOD_MS 20u
+#define ROBOT_UART_TIMEOUT_MS 500u
+
+#define WHEEL_RADIUS_M 0.04f
+#define WHEELBASE_M 0.25f
+#define TRACK_WIDTH_M 0.20f
+#define YAW_ARM_M ((WHEELBASE_M + TRACK_WIDTH_M) * 0.5f)
+
+#define ENCODER_CPR 1320.0f
+#define MAX_WHEEL_RPM 333.0f
+#define VY_INVERTED 0
+#define OMEGA_INVERTED 0
+
+#define PWM_TIM_ARR 3599u
+#define PWM_FREQUENCY_HZ 20000u
+
+#define PID_KP_DEFAULT 0.0035f
+#define PID_KI_DEFAULT 0.015f
+#define PID_KD_DEFAULT 0.00015f
+#define PID_OUT_MIN (-1.0f)
+#define PID_OUT_MAX (1.0f)
+#define PID_I_MIN (-0.5f)
+#define PID_I_MAX (0.5f)
+#define PID_D_FILTER_ALPHA 0.30f
+#define DEADZONE_DEFAULT 0.08f
+
+#define UART_BAUDRATE 115200u
+#define PROTOCOL_LINE_MAX 96u
+#define RX_RING_SIZE 256u
+#define TX_BUFFER_SIZE 128u
+
+#endif
