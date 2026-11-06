@@ -252,16 +252,16 @@ class RobotGUI(object):
             font=(self.font_family, 8, "bold"),
         )
         self.mode_badge.pack(side="left")
-        self.sim_badge = tk.Label(
+        self.transport_badge = tk.Label(
             badges,
-            text="MÔ PHỎNG" if self.simulated else "SERIAL",
+            text=self.config.transport_label,
             bg=YELLOW if self.simulated else GREEN,
             fg="#ffffff",
             padx=10,
             pady=3,
             font=(self.font_family, 8, "bold"),
         )
-        self.sim_badge.pack(side="left", padx=(8, 0))
+        self.transport_badge.pack(side="left", padx=(8, 0))
 
         self._button(
             inner,
@@ -307,9 +307,9 @@ class RobotGUI(object):
         card, body = self._card(parent, "KẾT NỐI", "UART")
         card.pack(fill="x", pady=(0, 10))
         rows = (
-            ("Cổng", self.config.serial_port),
-            ("Baud", str(self.config.baudrate)),
-            ("Giao thức", "Text line · 8N1"),
+            ("Kênh", self.config.transport_label),
+            ("Địa chỉ", self.config.connection_label),
+            ("Chi tiết", self.config.connection_detail),
         )
         for row, (name, value) in enumerate(rows):
             self._label(body, name, size=8, color=MUTED).grid(row=row, column=0, sticky="w", pady=3)
@@ -725,7 +725,7 @@ class RobotGUI(object):
             color=DIM,
             bg=BG,
         ).pack(side="left")
-        self.footer_var = tk.StringVar(value="Mô phỏng" if self.simulated else self.config.serial_port)
+        self.footer_var = tk.StringVar(value=self.config.connection_label)
         self._label(footer, "", size=8, color=MUTED, bg=BG, textvariable=self.footer_var).pack(side="right")
 
     def _bind_keys(self):
@@ -1020,7 +1020,7 @@ class RobotGUI(object):
         self.footer_var.set(
             "Mô phỏng · lệnh %d Hz" % int(1.0 / max(self.config.command_period_s, 1e-6))
             if self.simulated
-            else "%s · %d baud" % (self.config.serial_port, self.config.baudrate)
+            else "%s · %s" % (self.config.connection_label, self.config.connection_detail)
         )
         self.root.after(50, self._tick)
 

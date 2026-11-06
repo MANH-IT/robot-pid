@@ -14,7 +14,12 @@
 | Chu kỳ lệnh host | 20 Hz |
 | Chu kỳ telemetry | 20 ms (50 Hz) |
 
-Nối chéo TX/RX, nối chung GND. Không nối 5 V của Blue Pill với Jetson.
+Nối chéo TX/RX, nối chung GND. Không nối 5 V của Blue Pill với ESP8266 hoặc USB-UART.
+
+Host có thể kết nối theo hai cách:
+
+- **USB-UART có dây:** `/dev/ttyUSB0` hoặc `COMx`, dùng trực tiếp giao thức dưới đây.
+- **WiFi qua ESP8266:** ESP-01S làm cầu nối trong suốt TCP ↔ UART. Laptop mở TCP tới ESP và gửi đúng các dòng lệnh; không cần thêm lớp giao thức. Xem [esp8266.md](esp8266.md).
 
 ## 2. Host → STM32
 
@@ -180,3 +185,5 @@ Host → V,0.0000,0.0000,0.0000
 - Dòng quá dài bị bỏ qua toàn bộ cho đến ký tự xuống dòng tiếp theo.
 - `PING` và `STOP` được xử lý trước khi parse số.
 - Nếu cần thêm lệnh, giữ nguyên các lệnh cũ để không phá vỡ host.
+- Khi dùng WiFi, byte có thể đến theo gói TCP không trùng với ranh giới dòng; host và firmware đều phải đệm và tách theo `\n`. Link TCP trong host đã xử lý việc này.
+- WiFi có thể thêm trễ 5–50 ms; khi hiệu chuẩn PID nên dùng USB-UART để giảm jitter.

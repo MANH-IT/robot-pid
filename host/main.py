@@ -7,12 +7,20 @@ from robot_host.config import RobotConfig
 from robot_host.gui import RobotGUI
 from robot_host.serial_link import SerialLink
 from robot_host.sim_link import SimulatedLink
+from robot_host.tcp_link import TcpLink
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Điều khiển robot Mecanum qua UART")
+    parser = argparse.ArgumentParser(description="Điều khiển robot Mecanum qua USB-UART hoặc WiFi")
     parser.add_argument("--port", default="/dev/ttyUSB0", help="cổng serial (mặc định /dev/ttyUSB0)")
     parser.add_argument("--baud", type=int, default=115200)
+    parser.add_argument(
+        "--tcp",
+        nargs="?",
+        const="192.168.4.1:8080",
+        metavar="HOST[:PORT]",
+        help="kết nối TCP tới ESP8266 cầu nối UART-WiFi (mặc định 192.168.4.1:8080)",
+    )
     parser.add_argument("--sim", action="store_true", help="chạy mô phỏng, không cần phần cứng")
     parser.add_argument("--monitor", action="store_true", help="chỉ in telemetry, không mở GUI")
     parser.add_argument("--wheel-radius", type=float, default=0.04, help="bán kính bánh hiệu dụng (m)")
@@ -52,8 +60,27 @@ def run_monitor(link):
         pass
 
 
+def parse_tcp_endpoint(value):
+    host = value
+    port = 8080
+    if ":" in value:
+        host, raw_port = value.rsplit(":", 1)
+        port = int(raw_port)
+    return host, port
+
+
 def main():
     args = parse_args()
+    tcp_host = "192.168.4.1"
+    tcp_port = 8080
+    transport = "serial"
+
+    if args.tcp:
+        tcp_host, tcp_port = parse_tcp_endpoint(args.tcp)
+        transport = "tcp"
+    if args.sim:
+        transport = "sim"
+
     config = RobotConfig(
         wheel_radius_m=args.wheel_radius,
         wheelbase_m=args.wheelbase,
@@ -63,10 +90,15 @@ def main():
         omega_inverted=args.invert_omega,
         serial_port=args.port,
         baudrate=args.baud,
+        transport=transport,
+        tcp_host=tcp_host,
+        tcp_port=tcp_port,
     )
 
     if args.sim:
         link = SimulatedLink(config)
+    elif transport == "tcp":
+        link = TcpLink(config)
     else:
         link = SerialLink(config)
 

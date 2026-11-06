@@ -16,6 +16,9 @@ class RobotConfig(object):
         scale_to_limit=True,
         serial_port="/dev/ttyUSB0",
         baudrate=115200,
+        transport="serial",
+        tcp_host="192.168.4.1",
+        tcp_port=8080,
         command_rate_hz=20.0,
         telemetry_timeout_s=0.5,
         max_linear_speed=1.2,
@@ -31,6 +34,9 @@ class RobotConfig(object):
         self.scale_to_limit = bool(scale_to_limit)
         self.serial_port = str(serial_port)
         self.baudrate = int(baudrate)
+        self.transport = str(transport)
+        self.tcp_host = str(tcp_host)
+        self.tcp_port = int(tcp_port)
         self.command_rate_hz = float(command_rate_hz)
         self.telemetry_timeout_s = float(telemetry_timeout_s)
         self.max_linear_speed = float(max_linear_speed)
@@ -52,6 +58,29 @@ class RobotConfig(object):
     def command_period_s(self):
         return 1.0 / max(self.command_rate_hz, 1.0)
 
+    @property
+    def connection_label(self):
+        if self.transport == "tcp":
+            return "%s:%d" % (self.tcp_host, self.tcp_port)
+        if self.transport == "sim":
+            return "Mô phỏng"
+        return self.serial_port
+
+    @property
+    def connection_detail(self):
+        if self.transport == "tcp":
+            return "WiFi TCP"
+        if self.transport == "sim":
+            return "Simulated"
+        return "%d baud" % self.baudrate
+
+    @property
+    def transport_label(self):
+        return {
+            "tcp": "WIFI",
+            "sim": "MÔ PHỎNG",
+        }.get(self.transport, "SERIAL")
+
     def copy(self):
         return RobotConfig(
             wheel_radius_m=self.wheel_radius_m,
@@ -64,6 +93,9 @@ class RobotConfig(object):
             scale_to_limit=self.scale_to_limit,
             serial_port=self.serial_port,
             baudrate=self.baudrate,
+            transport=self.transport,
+            tcp_host=self.tcp_host,
+            tcp_port=self.tcp_port,
             command_rate_hz=self.command_rate_hz,
             telemetry_timeout_s=self.telemetry_timeout_s,
             max_linear_speed=self.max_linear_speed,

@@ -1,6 +1,7 @@
 PORT ?= /dev/ttyUSB0
+ESP ?= 192.168.4.1:8080
 
-.PHONY: test sim monitor firmware upload clean
+.PHONY: test sim monitor monitor-wifi wifi firmware upload clean
 
 test:
 	cd host && python3 -m pytest -q
@@ -10,6 +11,12 @@ sim:
 
 monitor:
 	cd host && python3 main.py --port $(PORT) --monitor
+
+monitor-wifi:
+	cd host && python3 main.py --tcp $(ESP) --monitor
+
+wifi:
+	cd host && python3 main.py --tcp $(ESP)
 
 firmware:
 	pio run -d firmware

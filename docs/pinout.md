@@ -4,8 +4,8 @@
 
 | Chân | Chức năng | Nối tới |
 |---|---|---|
-| PA2 | USART2_TX | RX của Jetson/Laptop (3.3 V) |
-| PA3 | USART2_RX | TX của Jetson/Laptop (3.3 V) |
+| PA2 | USART2_TX | RX của ESP8266 hoặc USB-UART (3.3 V) |
+| PA3 | USART2_RX | TX của ESP8266 hoặc USB-UART (3.3 V) |
 | PA8 | TIM1_CH1 | BTS7960 #1 RPWM |
 | PA6 | TIM3_CH1 | BTS7960 #1 LPWM |
 | PA9 | TIM1_CH2 | BTS7960 #2 RPWM |
@@ -80,40 +80,58 @@ Nếu động cơ quay nhưng RPM hiển thị âm, đặt `ENCx_INVERT 1` trong
 ## 5. Nguồn
 
 ```
-Pin 4S Li-ion 14.8 V (16.8 V khi đầy)
+Pin Li-ion 5S 18 V (21 V khi sạc đầy)
    │
    ├── Cầu chì + công tắc E-STOP
    │
-   ├── Buck 12 V / ≥10 A ──► VM 4 × BTS7960
+   ├── Buck 21 V → 12 V / dòng lớn ──► VM 4 × BTS7960
    │
-   ├── Buck 5 V / ≥3 A ───► Blue Pill 5V, logic BTS7960, encoder VCC
+   ├── Buck 21 V → 5 V / ≥3 A ──────► Blue Pill 5V, logic BTS7960, encoder VCC
    │
-   └── Buck 5 V / ≥4 A ───► Jetson Nano (dùng buck riêng)
+   └── Buck 5 V → 3.3 V / >500 mA ──► ESP8266 (ESP-01S)
 ```
 
-- Jetson Nano không cấp nguồn cho động cơ.
+- Buck 12 V phải chịu dòng khởi động lớn của 4 động cơ; dùng dây 14 AWG cho nhánh nguồn động cơ.
+- ESP8266 không lấy nguồn từ chân 3V3 của Blue Pill; dùng buck 3.3 V riêng.
 - Nối chung GND giữa tất cả các khối.
-- Đo điện áp thực trước khi cắm Jetson/STM32.
+- Đo điện áp thực trước khi cắm ESP8266/STM32.
 - Thêm tụ bulk và tụ gốm tại đầu vào mỗi buck.
 
-## 6. UART với Jetson Nano
+## 6. UART với ESP8266 hoặc laptop
 
-Jetson Nano header J41:
+### 6.1 ESP8266 ESP-01S (WiFi)
 
-| Jetson | STM32 |
+| ESP-01S | STM32 / nguồn |
 |---|---|
-| Pin 8 (UART1_TX, 3.3 V) | PA3 (USART2_RX) |
-| Pin 10 (UART1_RX, 3.3 V) | PA2 (USART2_TX) |
-| Pin 6 (GND) | GND |
+| VCC | 3.3 V từ buck (không dùng 5 V) |
+| GND | GND chung |
+| TX | PA3 (USART2_RX) |
+| RX | PA2 (USART2_TX) |
+| CH_PD / EN | 3.3 V |
+| GPIO0 | 3.3 V khi chạy bình thường |
+| GPIO2 | để trống hoặc 3.3 V |
 
-Cấu hình thiết bị trên Jetson thường là `/dev/ttyTHS1`. Kiểm tra bằng:
+- ESP8266 dùng logic 3.3 V; PA2/PA3 của STM32 cũng 3.3 V nên có thể nối trực tiếp.
+- Không cấp 5 V vào VCC hoặc chân tín hiệu của ESP-01S.
+- Cấu hình ESP làm cầu nối trong suốt TCP ↔ UART: xem [esp8266.md](esp8266.md).
+- Host kết nối mặc định `192.168.4.1:8080` bằng `python3 main.py --tcp 192.168.4.1:8080`.
+
+### 6.2 USB-UART có dây
+
+Dùng USB-UART CP2102/CH340 ở mức 3.3 V:
+
+| USB-UART | STM32 |
+|---|---|
+| TX | PA3 (USART2_RX) |
+| RX | PA2 (USART2_TX) |
+| GND | GND |
+
+Thiết bị thường là `/dev/ttyUSB0` trên Linux, `COMx` trên Windows.
+Kiểm tra bằng:
 
 ```bash
-ls -l /dev/ttyTHS*
-python3 -m serial.tools.miniterm /dev/ttyTHS1 115200
+python3 -m serial.tools.miniterm /dev/ttyUSB0 115200
 ```
-
-Nếu dùng laptop, dùng USB-UART CP2102/CH340 ở 3.3 V và `/dev/ttyUSB0`.
 
 ## 7. Những chân nên tránh
 

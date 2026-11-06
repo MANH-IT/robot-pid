@@ -4,6 +4,7 @@
 import argparse
 import csv
 import os
+import socket
 import sys
 import time
 
@@ -12,10 +13,45 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from robot_host.protocol import format_pid, format_rpm, format_stop, parse_telemetry
 
 
+class SocketPort(object):
+    def __init__(self, host, port, timeout=0.05):
+        self._socket = socket.create_connection((host, port), timeout=1.0)
+        self._socket.settimeout(timeout)
+        self._buffer = b""
+
+    def write(self, data):
+        self._socket.sendall(data)
+
+    def readline(self):
+        while b"\n" not in self._buffer:
+            try:
+                chunk = self._socket.recv(256)
+            except socket.timeout:
+                return b""
+            if not chunk:
+                return b""
+            self._buffer += chunk
+        line, self._buffer = self._buffer.split(b"\n", 1)
+        return line + b"\n"
+
+    def close(self):
+        self._socket.close()
+
+
+def parse_tcp_endpoint(value):
+    host = value
+    port = 8080
+    if ":" in value:
+        host, raw_port = value.rsplit(":", 1)
+        port = int(raw_port)
+    return host, port
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Đo đáp ứng bước của một bánh")
     parser.add_argument("--port", default="/dev/ttyUSB0")
     parser.add_argument("--baud", type=int, default=115200)
+    parser.add_argument("--tcp", metavar="HOST[:PORT]", help="kết nối TCP tới ESP8266")
     parser.add_argument("--wheel", type=int, default=1, choices=[1, 2, 3, 4])
     parser.add_argument("--rpm", type=float, default=100.0)
     parser.add_argument("--duration", type=float, default=3.0)
@@ -32,13 +68,17 @@ def send(serial_port, text):
 
 def main():
     args = parse_args()
-    try:
-        import serial
-    except ImportError:
-        print("Thiếu pyserial: pip install pyserial")
-        return 1
+    if args.tcp:
+        host, tcp_port = parse_tcp_endpoint(args.tcp)
+        port = SocketPort(host, tcp_port)
+    else:
+        try:
+            import serial
+        except ImportError:
+            print("Thiếu pyserial: pip install pyserial")
+            return 1
+        port = serial.Serial(args.port, args.baud, timeout=0.05, write_timeout=0.2)
 
-    port = serial.Serial(args.port, args.baud, timeout=0.05, write_timeout=0.2)
     targets = [0.0, 0.0, 0.0, 0.0]
     targets[args.wheel - 1] = args.rpm
 

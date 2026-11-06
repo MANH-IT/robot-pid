@@ -4,12 +4,15 @@
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ CẤP CAO: Jetson Nano / Laptop (Ubuntu, Python)             │
+│ CẤP CAO: Laptop/PC (Windows/Linux/macOS, Python)           │
 │  - GUI Tkinter / teleop                                     │
 │  - Động học nghịch Mecanum (vx, vy, ω) → RPM 4 bánh         │
 │  - Odometry (RPM thực → x, y, θ)                            │
-│  - YOLO nhận diện người đi bộ + chính sách an toàn          │
 │  - Gửi lệnh 20 Hz, nhận telemetry 50 Hz                     │
+└──────────────────────────────┬─────────────────────────────┘
+                               │ WiFi TCP (hoặc USB-UART)
+┌──────────────────────────────┴─────────────────────────────┐
+│ ESP8266 ESP-01S: cầu nối trong suốt TCP ↔ UART              │
 └──────────────────────────────┬─────────────────────────────┘
                                │ UART2 115200 8N1
                                │ TX/RX dạng text, newline
@@ -25,13 +28,15 @@
                      4 × JGB37-520 + encoder Hall
 ```
 
-Lý do phân tầng: vòng PID cần jitter thấp và phải chạy độc lập với AI/GUI. STM32 đảm bảo chu kỳ 10 ms ổn định; Jetson có thể bận chạy YOLO mà không làm mất vòng kín.
+Lý do phân tầng: vòng PID cần jitter thấp và phải chạy độc lập với GUI/WiFi. STM32 đảm bảo chu kỳ 10 ms ổn định; laptop có thể bận vẽ đồ thị hoặc mạng WiFi chập chờn mà không làm mất vòng kín. Nếu mất kết nối quá 500 ms, firmware tự dừng động cơ.
+
+ESP8266 chỉ là cầu nối byte trong suốt, không xử lý giao thức. Mọi lệnh vẫn do laptop tạo ra theo [uart_protocol.md](uart_protocol.md).
 
 ## 2. Luồng dữ liệu
 
-1. GUI hoặc AI đặt vận tốc thân `(vx, vy, ω)`.
-2. Host tính động học nghịch → 4 RPM đặt, đóng gói `V,...` hoặc `R,...`, gửi 20 Hz.
-3. STM32 nhận UART ngắt từng byte, parser dòng lệnh, cập nhật setpoint.
+1. GUI đặt vận tốc thân `(vx, vy, ω)`.
+2. Host tính động học nghịch → 4 RPM đặt, đóng gói `V,...` hoặc `R,...`, gửi 20 Hz qua USB-UART hoặc TCP tới ESP8266.
+3. ESP8266 chuyển nguyên văn byte xuống UART2; STM32 nhận UART ngắt từng byte, parser dòng lệnh, cập nhật setpoint.
 4. Mỗi 10 ms: đọc delta encoder, tính RPM thực, chạy 4 PID, xuất PWM.
 5. Mỗi 20 ms: gửi `T,...` gồm RPM thực và RPM đặt.
 6. Host parse telemetry, cập nhật đồ thị và odometry.
@@ -110,4 +115,5 @@ y += (vx·sinθ + vy·cosθ)·dt
 - EXTI x4 có thể bỏ xung nếu A và B đổi đồng thời ở tốc độ rất cao; với 333 RPM và 1320 CPR, khoảng cách cạnh ≈ 136 µs nên an toàn trong thực tế. Có thể chuyển sang timer encoder mode nếu cần.
 - Chưa có IMU; odometry sẽ trôi khi bánh trượt.
 - Chưa có PID vị trí/heading; hiện tại là vòng kín tốc độ.
-- Có thể thêm CAN/USB CDC, lưu PID vào flash, hoặc ROS 2 bridge.
+- WiFi thêm độ trễ và jitter so với USB-UART; timeout 500 ms vẫn bảo vệ robot nhưng nên ưu tiên USB-UART khi hiệu chuẩn PID.
+- Có thể thêm web app chạy trực tiếp trên ESP8266, lưu PID vào flash, hoặc ROS 2 bridge.

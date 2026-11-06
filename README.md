@@ -1,9 +1,9 @@
-# Robot Mecanum PID + AI nhận diện người đi bộ
+# Robot Mecanum PID
 
 Robot di động 4 bánh Mecanum điều khiển phân tầng:
 
 - **Cấp thấp – STM32F103C8T6 (Blue Pill):** đọc 4 encoder Hall bằng EXTI, chạy 4 bộ PID vòng kín chu kỳ 10 ms, xuất 8 kênh PWM 20 kHz qua 4 module BTS7960, giao tiếp UART 115200 bps, tự dừng sau 500 ms mất lệnh.
-- **Cấp cao – Jetson Nano / Laptop / PC:** tính động học nghịch Mecanum, gửi lệnh vận tốc hoặc RPM, nhận telemetry 50 Hz, vẽ đồ thị, tính odometry, và chạy YOLO nhận diện người đi bộ để giảm tốc/dừng robot.
+- **Cấp cao – Laptop/PC:** tính động học nghịch Mecanum, gửi lệnh vận tốc hoặc RPM, nhận telemetry 50 Hz, vẽ đồ thị và tính odometry. Kết nối robot qua USB-UART hoặc WiFi qua ESP8266 (cầu nối trong suốt UART-WiFi).
 
 ## Cấu trúc repo
 
@@ -21,10 +21,11 @@ Robot di động 4 bánh Mecanum điều khiển phân tầng:
 │   │   ├── pid.c/.h          # PID anti-windup, derivative-on-measurement
 │   │   ├── control.c/.h      # 4 PID + động học nghịch + timeout
 │   │   └── protocol.c/.h     # UART line protocol, telemetry
+│   ├── esp8266/
+│   │   └── esp8266_bridge.ino # cầu nối trong suốt TCP ↔ UART
 │   └── platformio.ini
-├── host/                     # Python 3 cho Jetson/Laptop
+├── host/                     # Python 3 cho Laptop/PC
 │   ├── main.py               # GUI Tkinter hoặc chế độ monitor
-│   ├── ai_demo.py            # webcam + YOLO + dừng khi có người
 │   ├── robot_host/
 │   │   ├── config.py
 │   │   ├── kinematics.py
@@ -32,9 +33,9 @@ Robot di động 4 bánh Mecanum điều khiển phân tầng:
 │   │   ├── protocol.py
 │   │   ├── link.py
 │   │   ├── serial_link.py
+│   │   ├── tcp_link.py       # WiFi TCP tới ESP8266
 │   │   ├── sim_link.py
-│   │   ├── gui.py
-│   │   └── vision.py
+│   │   └── gui.py
 │   └── tests/
 ├── tools/
 │   └── step_response.py      # đo step response PID, xuất CSV
@@ -43,7 +44,8 @@ Robot di động 4 bánh Mecanum điều khiển phân tầng:
 │   ├── uart_protocol.md
 │   ├── pinout.md
 │   ├── calibration.md
-│   └── ai.md
+│   ├── esp8266.md            # cầu nối WiFi UART
+│   └── bom.md                # danh mục linh kiện
 └── Makefile
 ```
 
@@ -64,13 +66,21 @@ Tab **RPM trực tiếp** gửi 4 RPM riêng và chỉnh PID online.
 
 ### 2. Host với robot thật
 
+Qua USB-UART có dây:
+
 ```bash
 cd host
 source .venv/bin/activate
 python3 main.py --port /dev/ttyUSB0
 ```
 
-Linux cần quyền cổng serial:
+Qua WiFi (ESP8266 cầu nối trong suốt):
+
+```bash
+python3 main.py --tcp 192.168.4.1:8080
+```
+
+Linux cần quyền cổng serial nếu dùng USB-UART:
 
 ```bash
 sudo usermod -aG dialout $USER
@@ -78,6 +88,7 @@ sudo usermod -aG dialout $USER
 
 Nếu robot đi ngang ngược chiều, thêm `--invert-vy`; nếu xoay ngược chiều, thêm `--invert-omega`.
 Sau khi đo hình học thật, truyền `--wheelbase`, `--track`, `--wheel-radius` (mét).
+Cấu hình ESP8266: [docs/esp8266.md](docs/esp8266.md).
 
 ### 3. Nạp firmware
 
@@ -97,16 +108,14 @@ cd host
 python3 -m pytest -q
 ```
 
-### 5. AI nhận diện người đi bộ
+### 5. Kết nối WiFi qua ESP8266
 
-```bash
-cd host
-pip install -r requirements-vision.txt
-python3 ai_demo.py --port /dev/ttyUSB0 --backend ultralytics --model yolov8n.pt
-```
+ESP-01S chạy như cầu nối trong suốt: nhận byte TCP từ laptop và chuyển nguyên văn xuống UART2 của STM32, theo chiều ngược lại cho telemetry.
 
-Robot tự tiến chậm khi đường trống, giảm tốc khi người ở vùng chậm, dừng khi người ở gần.
-Nhấn `Space` để tạm dừng, `Esc` để thoát. Chi tiết: [docs/ai.md](docs/ai.md).
+- Mặc định host kết nối `192.168.4.1:8080` (ESP phát AP): `python3 main.py --tcp`.
+- Có thể chỉ định địa chỉ: `python3 main.py --tcp 192.168.1.50:8080`.
+- Nếu dùng USB-UART có dây, giữ `--port /dev/ttyUSB0`.
+- Hướng dẫn nạp và cấu hình ESP: [docs/esp8266.md](docs/esp8266.md).
 
 ## Giao thức UART tóm tắt
 
@@ -140,9 +149,11 @@ Chi tiết: [docs/uart_protocol.md](docs/uart_protocol.md).
 | Bánh | Mecanum đường kính 80 mm, R = 0.04 m |
 | Driver | 4 × BTS7960 |
 | MCU | STM32F103C8T6 Blue Pill |
-| Máy tính | Jetson Nano B01 4 GB hoặc laptop/PC |
-| Nguồn | Pin 4S Li-ion 14.8 V → buck 12 V (động cơ), buck 5 V (logic/Jetson) |
+| Giao tiếp | WiFi ESP8266 (ESP-01S) cầu nối trong suốt UART, hoặc USB-UART có dây |
+| Host | Laptop/PC chạy Python 3 (Windows/Linux/macOS) |
+| Nguồn | Pin Li-ion 5S 18 V (21 V đầy) → buck 12 V (động cơ), buck 5 V (logic), buck 3.3 V (ESP8266) |
 
+Danh mục linh kiện đầy đủ (số lượng, trạng thái mua): [docs/bom.md](docs/bom.md).
 Sơ đồ chân và cảnh báo mức điện áp: [docs/pinout.md](docs/pinout.md).
 
 ## Hiệu chuẩn bắt buộc trên robot thật
@@ -160,8 +171,8 @@ Quy trình chi tiết: [docs/calibration.md](docs/calibration.md).
 ## An toàn
 
 - Encoder Hall thường dùng 5 V. **Không nối trực tiếp vào STM32 3.3 V** nếu chưa kiểm tra; dùng level shifter hoặc cầu chia áp.
-- Nối chung GND giữa pin, buck, STM32, BTS7960 và Jetson.
-- Jetson Nano cần nguồn 5 V đủ dòng, không lấy từ chân 5 V của Blue Pill.
+- Nối chung GND giữa pin, buck, STM32, BTS7960, ESP8266 và USB-UART.
+- ESP8266 dùng logic 3.3 V và cần nguồn 3.3 V đủ dòng (đỉnh > 500 mA), không lấy từ chân 3V3 của Blue Pill.
 - Khi hiệu chuẩn PID, kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực an toàn.
 - Luôn có nút dừng khẩn cấp vật lý cắt nguồn động cơ.
 
