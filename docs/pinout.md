@@ -1,11 +1,266 @@
 # Sơ đồ chân và đấu dây
 
-## 1. Bảng chân STM32F103C8T6
+Thiết kế dây dưới đây được tính lại theo **BOM hiện tại** ([bom.md](bom.md)):
+
+- Pin Li-ion 5S 4 Ah (18 V danh định, 21 V khi đầy) có BMS.
+- Buck 20 A: 21 V → 12 V cho 4 × BTS7960.
+- LM2596: 21 V → 5 V / 3 A cho Blue Pill, logic BTS7960, encoder.
+- Buck 3.3 V: 5 V → 3.3 V / > 500 mA cho ESP-01S.
+- 4 × JGB37-520 12 V 333 RPM + encoder Hall; 4 × BTS7960; STM32F103C8T6.
+
+> Các giá trị dòng của động cơ là **giả thiết tiêu biểu**, phải đối chiếu datasheet lô hàng thực tế. Nếu sai khác nhiều, tính lại theo mục 2.
+
+## 1. Sơ đồ khối nguồn
+
+```
+Pin 5S 18 V (21 V đầy) 4 Ah + BMS
+  P+ ──► Cầu chì 15 A ──► E-STOP ──► Bus pin
+  P- ───────────────────────────────► Điểm sao GND
+                                         │
+        ┌────────────────────────────────┼─────────────────────────────┐
+        │                                │                             │
+   Buck 20 A 21V→12V              LM2596 21V→5V                 Buck 3.3V
+        │                                │                        (5V→3.3V)
+   Bus 12 V                         Bus 5 V                          │
+        │                          ┌─────┼──────────┐           Bus 3.3 V
+        │                          │     │          │                │
+   4 × BTS7960 VM           Blue Pill 5V  BTS VCC  Encoder VCC   ESP-01S
+        │                          │         │          │             │
+   4 × động cơ JGB37-520      STM32 3.3V logic  R_EN/L_EN       (TX/RX 3.3V)
+        │
+   Encoder A/B ──► cầu chia 10k/20k ──► PB6…PB13
+```
+
+Nguyên tắc:
+
+- Cầu chì và E-STOP nằm **ngay sau pin**, trước mọi buck.
+- Buck 12 V chỉ nuôi động cơ; buck 5 V nuôi logic; buck 3.3 V chỉ nuôi ESP.
+- Tất cả GND nối về **một điểm sao** tại cực âm pin/BMS.
+
+## 2. Tính toán phụ tải và chọn nguồn
+
+### 2.1 Giả thiết động cơ JGB37-520 12 V 333 RPM
+
+| Thông số | Giá trị dùng tính toán |
+|---|---|
+| Điện áp định mức | 12 V |
+| Dòng không tải | 0,18 A |
+| Dòng định mức | 0,60 A |
+| Dòng kẹt (stall) | 3,2 A |
+| 4 động cơ – định mức | 2,4 A |
+| 4 động cơ – stall | 12,8 A |
+| Công suất 4 động cơ – định mức | 28,8 W |
+| Công suất 4 động cơ – stall | 153,6 W |
+
+### 2.2 Dòng từng rail
+
+| Rail | Tải | Dòng trung bình | Dòng đỉnh |
+|---|---|---|---|
+| 12 V | 4 × JGB37-520 | 2,4 A | 12,8 A (stall) |
+| 5 V | Blue Pill | 0,05 A | 0,05 A |
+| 5 V | 4 × logic BTS7960 | 0,06 A | 0,06 A |
+| 5 V | 4 × encoder Hall | 0,08 A | 0,08 A |
+| 5 V | Đầu vào buck 3.3 V | 0,27 A | 0,39 A |
+| **5 V** | **Tổng** | **0,46 A** | **0,58 A** |
+| 3,3 V | ESP-01S | 0,08 A | 0,35 A (thiết kế 0,5 A) |
+
+### 2.3 Dòng pin và thời gian chạy
+
+Dùng hiệu suất thực tế: buck 12 V ≈ 0,90; LM2596 ≈ 0,78; buck 3.3 V ≈ 0,85.
+
+```
+Chế độ định mức:
+P_pin = 28,8/0,90 + (5 × 0,46)/0,78 = 32,0 + 2,95 ≈ 35,0 W
+I_pin = 35,0 / 18,5 ≈ 1,89 A
+
+Chế độ stall:
+P_pin = 153,6/0,90 + 2,95 ≈ 173,6 W
+I_pin = 173,6 / 18,5 ≈ 9,4 A
+```
+
+- BMS và cầu chì phải chịu **≥ 10 A liên tục ngắn hạn**, tốt nhất ≥ 20 A đỉnh.
+- Thời gian chạy lý thuyết: `4 Ah × 0,8 / 1,89 ≈ 1,7 h`; thực tế 1,2–1,5 h do tải thay đổi.
+- Dòng khởi động có thể vượt 9,4 A trong vài trăm ms; chọn cầu chì **slow-blow**.
+
+### 2.4 Kiểm tra công suất buck
+
+| Buck | Dòng ra cần | Định mức | Hệ số dư |
+|---|---|---|---|
+| 21 V → 12 V | 12,8 A (stall), 2,4 A (định mức) | 20 A | 1,56× stall |
+| 21 V → 5 V | 0,58 A | 3 A | 5,2× |
+| 5 V → 3,3 V | 0,5 A | > 0,5 A | 1,0× (nên chọn ≥ 1 A) |
+
+Lưu ý:
+
+- Buck 12 V 20 A là đủ cho stall ngắn hạn; không chạy stall liên tục.
+- LM2596 3 A chỉ đạt 3 A khi tản nhiệt tốt; tải thực 0,58 A nên không cần heatsink lớn.
+- Buck 3.3 V loại "> 500 mA" đang sát đỉnh ESP; nếu mua mới nên chọn **≥ 1 A**.
+
+## 3. Chọn dây và cầu chì
+
+### 3.1 Tiết diện dây
+
+Điện trở 14 AWG ≈ **8,286 mΩ/m**; ampacity chassis ≈ **15 A**.
+Sụt áp: `ΔV = I × 2L × R_per_m` (L là chiều dài một chiều).
+
+| Nhánh | Dòng lớn nhất | Dây | Ghi chú |
+|---|---|---|---|
+| Pin → cầu chì → bus | 9,4 A | 14 AWG (12 AWG nếu > 0,5 m) | đỏ (+), đen (−) |
+| Bus 12 V → mỗi BTS7960 | 3,2 A/nhánh, 12,8 A tổng | 14 AWG bus, 14–16 AWG nhánh | giữ nhánh < 0,5 m |
+| 5 V | 0,58 A | 20–22 AWG | |
+| 3,3 V | 0,5 A | 22–24 AWG | |
+| Encoder A/B | < 5 mA | 24–26 AWG | nên xoắn đôi |
+| PWM, UART | < 1 mA | 24–26 AWG (jumper) | |
+
+Ví dụ sụt áp: bus 12 V dài 0,5 m, dòng 12,8 A:
+
+```
+ΔV = 12,8 × 2 × 0,5 × 0,008286 ≈ 0,106 V  (≈ 0,9 %)
+```
+
+Giữ tổng chiều dài nhánh 12 V **< 1 m** để sụt áp < 2 %.
+
+### 3.2 Cầu chì
+
+| Vị trí | Định mức | Loại |
+|---|---|---|
+| Tổng, ngay sau pin | 15 A | ATO blade slow-blow |
+| Mỗi động cơ (tùy chọn) | 5 A | slow-blow |
+| 5 V (tùy chọn) | 1 A | |
+| 3,3 V (tùy chọn) | 1 A | |
+
+Kiểm tra: 15 A > 9,4 A đỉnh và ≤ ampacity 14 AWG (15 A); dòng định mức chỉ 1,9 A nên an toàn.
+
+## 4. Đấu dây chi tiết
+
+### 4.1 Pin → phân phối
+
+| Từ | Tới | Dây |
+|---|---|---|
+| Pin P+ | Cầu chì 15 A | 14 AWG đỏ |
+| Cầu chì | E-STOP | 14 AWG đỏ |
+| E-STOP | Bus + (buck 12 V, LM2596) | 14 AWG đỏ |
+| Pin P- | Điểm sao GND | 14 AWG đen |
+| Bus GND | GND các buck, BTS, Blue Pill, ESP | 14–22 AWG đen |
+
+- E-STOP phải có định mức **DC ≥ 20 A** (tiếp điểm DC dễ hàn dính nếu dùng công tắc AC).
+- Đặt cầu chì sát cực pin nhất có thể.
+
+### 4.2 Bus 12 V → BTS7960 → động cơ
+
+| BTS7960 | Nối |
+|---|---|
+| VM | Bus 12 V |
+| GND (power) | Power GND (điểm sao) |
+| VCC | 5 V logic |
+| GND (logic) | Logic GND |
+| R_EN | 5 V (qua 10 kΩ hoặc nối thẳng) |
+| L_EN | 5 V (qua 10 kΩ hoặc nối thẳng) |
+| RPWM | PA8 / PA9 / PA10 / PA11 |
+| LPWM | PA6 / PA7 / PB0 / PB1 |
+| M+ / M− | Hai cực động cơ |
+
+Bảng ghép bánh:
+
+| Bánh | RPWM | LPWM | Encoder A | Encoder B |
+|---|---|---|---|---|
+| 1 – FL (trước-trái) | PA8 (TIM1_CH1) | PA6 (TIM3_CH1) | PB6 | PB7 |
+| 2 – FR (trước-phải) | PA9 (TIM1_CH2) | PA7 (TIM3_CH2) | PB8 | PB9 |
+| 3 – RL (sau-trái) | PA10 (TIM1_CH3) | PB0 (TIM3_CH3) | PB10 | PB11 |
+| 4 – RR (sau-phải) | PA11 (TIM1_CH4) | PB1 (TIM3_CH4) | PB12 | PB13 |
+
+Lưu ý mức logic:
+
+- BTS7960 cần VCC = 5 V. Nếu module dùng buffer **74HC244** ở 5 V, mức cao 3,3 V có thể không đạt VIH ⇒ dùng **74HCT244** hoặc **TXS0108E** (8 kênh, 3,3 V → 5 V) cho 8 đường PWM.
+- Nếu đầu vào đi trực tiếp vào BTS7960 (VIH ≈ 2 V) thì 3,3 V đủ; kiểm tra bằng datasheet/module thực tế.
+- **Không** nối 12 V vào VCC/RPWM/LPWM.
+- Đặt tụ **1000 µF/25 V** gần thanh phân phối 12 V hoặc 470 µF mỗi module để giảm sụt áp khi đảo chiều.
+
+### 4.3 Bus 5 V
+
+| Tải | Nối |
+|---|---|
+| Blue Pill | Chân 5V và GND |
+| 4 × BTS7960 VCC | 5 V |
+| 4 × encoder VCC | 5 V |
+| Buck 3.3 V input | 5 V |
+
+- Dùng dây 20–22 AWG, nối hình sao từ bus 5 V, tránh daisy-chain dài.
+- Đặt **470 µF/16 V + 100 nF** tại đầu vào LM2596 và đầu ra 5 V.
+
+### 4.4 Bus 3.3 V → ESP-01S
+
+| ESP-01S | Nối |
+|---|---|
+| VCC | 3,3 V |
+| GND | GND |
+| TX | PA3 (USART2_RX) |
+| RX | PA2 (USART2_TX) |
+| CH_PD / EN | 3,3 V qua 10 kΩ |
+| GPIO0 | 3,3 V qua 10 kΩ (chế độ chạy) |
+| GPIO2 | 3,3 V qua 10 kΩ |
+| RST | 3,3 V qua 10 kΩ (tùy chọn) |
+
+- ESP-01S **chỉ dùng 3,3 V**; không cấp 5 V vào VCC hoặc chân tín hiệu.
+- Đặt **470 µF/10 V + 100 nF** sát chân VCC/GND của ESP để chịu đỉnh dòng WiFi.
+- PA2/PA3 của STM32 là 3,3 V nên nối trực tiếp TX↔RX (chéo).
+
+### 4.5 Encoder Hall → STM32
+
+Mỗi JGB37-520 có 6 dây: `M1`, `M2`, `VCC`, `GND`, `A`, `B`.
+
+Cầu chia áp cho A/B (5 V → 3,3 V):
+
+```
+Encoder A/B ──[ 10 kΩ ]──┬──► PBx (STM32)
+                         │
+                      [ 20 kΩ ]
+                         │
+                        GND
+```
+
+```
+Vout = 5 × 20 / (10 + 20) = 3,33 V
+Dòng qua cầu chia ≈ 5 / 30 kΩ ≈ 0,167 mA
+```
+
+- Tần số xung mỗi kênh: `333/60 × 330 ≈ 1,83 kHz` (chu kỳ ≈ 546 µs).
+- Nếu cần lọc nhiễu, chỉ dùng tụ **≤ 100 pF** (với 6,67 kΩ cho fc ≈ 240 kHz). **Không dùng 100 nF** vì sẽ lọc mất xung.
+- Dùng cặp dây xoắn A/B, tránh song song sát dây động cơ.
+- Nếu encoder là open-collector, bật pull-up nội trong firmware (đã bật `GPIO_PULLUP`) hoặc thêm 10 kΩ lên 3,3 V sau cầu chia.
+- Nếu RPM hiển thị âm khi bánh tiến: đặt `ENCx_INVERT 1` trong `firmware/include/board.h`.
+
+### 4.6 ST-Link V2
+
+| ST-Link | Blue Pill |
+|---|---|
+| 3,3 V | 3,3 V (chỉ tham chiếu; hoặc cấp nguồn khi nạp với động cơ OFF) |
+| GND | GND |
+| SWDIO | PA13 |
+| SWCLK | PA14 |
+| 5 V | **Không nối** |
+
+- Khi nạp firmware, **ngắt nguồn 12 V động cơ**.
+- Không nối 5 V của ST-Link vào Blue Pill khi Blue Pill đã được cấp 5 V từ LM2596.
+- Tránh để ST-Link 3,3 V đấu song song với regulator onboard khi hệ thống đang chạy.
+
+### 4.7 USB-UART có dây (thay WiFi)
+
+| USB-UART (3,3 V) | STM32 |
+|---|---|
+| TX | PA3 (USART2_RX) |
+| RX | PA2 (USART2_TX) |
+| GND | GND |
+| 3,3 V / 5 V | **Không nối** (chỉ dùng TX/RX/GND) |
+
+Dùng CP2102/CH340 ở mức logic 3,3 V. Không nối 5 V TTL vào PA2/PA3.
+
+### 4.8 Bảng chân STM32F103C8T6
 
 | Chân | Chức năng | Nối tới |
 |---|---|---|
-| PA2 | USART2_TX | RX của ESP8266 hoặc USB-UART (3.3 V) |
-| PA3 | USART2_RX | TX của ESP8266 hoặc USB-UART (3.3 V) |
+| PA2 | USART2_TX | RX của ESP8266 hoặc USB-UART (3,3 V) |
+| PA3 | USART2_RX | TX của ESP8266 hoặc USB-UART (3,3 V) |
 | PA8 | TIM1_CH1 | BTS7960 #1 RPWM |
 | PA6 | TIM3_CH1 | BTS7960 #1 LPWM |
 | PA9 | TIM1_CH2 | BTS7960 #2 RPWM |
@@ -14,127 +269,98 @@
 | PB0 | TIM3_CH3 | BTS7960 #3 LPWM |
 | PA11 | TIM1_CH4 | BTS7960 #4 RPWM |
 | PB1 | TIM3_CH4 | BTS7960 #4 LPWM |
-| PB6 | EXTI6 | Encoder #1 kênh A |
-| PB7 | EXTI7 | Encoder #1 kênh B |
-| PB8 | EXTI8 | Encoder #2 kênh A |
-| PB9 | EXTI9 | Encoder #2 kênh B |
-| PB10 | EXTI10 | Encoder #3 kênh A |
-| PB11 | EXTI11 | Encoder #3 kênh B |
-| PB12 | EXTI12 | Encoder #4 kênh A |
-| PB13 | EXTI13 | Encoder #4 kênh B |
+| PB6 | EXTI6 | Encoder #1 kênh A (qua chia áp) |
+| PB7 | EXTI7 | Encoder #1 kênh B (qua chia áp) |
+| PB8 | EXTI8 | Encoder #2 kênh A (qua chia áp) |
+| PB9 | EXTI9 | Encoder #2 kênh B (qua chia áp) |
+| PB10 | EXTI10 | Encoder #3 kênh A (qua chia áp) |
+| PB11 | EXTI11 | Encoder #3 kênh B (qua chia áp) |
+| PB12 | EXTI12 | Encoder #4 kênh A (qua chia áp) |
+| PB13 | EXTI13 | Encoder #4 kênh B (qua chia áp) |
 | PC13 | LED onboard | Active low |
-| 3V3 | Nguồn logic | Cảm biến/level shifter 3.3 V |
-| GND | Ground | GND chung toàn hệ thống |
-| 5V | Nguồn vào Blue Pill | Buck 5 V |
+| PA13 | SWDIO | ST-Link |
+| PA14 | SWCLK | ST-Link |
+| 3V3 | Nguồn logic | Cầu chia áp / tham chiếu 3,3 V |
+| 5V | Nguồn vào Blue Pill | Bus 5 V |
+| GND | Ground | Điểm sao GND |
 
-Thứ tự bánh: **#1 = trước-trái (FL), #2 = trước-phải (FR), #3 = sau-trái (RL), #4 = sau-phải (RR)**.
+Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**.
 
-## 2. Timer và tần số PWM
+### 4.9 Timer và tần số PWM
 
-- HCLK = 72 MHz.
-- TIM1 và TIM3 đều nhận clock timer 72 MHz.
-- Prescaler = 0, ARR = 3599 → `72e6 / 3600 = 20 kHz`.
-- 8 kênh PWM độc lập:
-  - TIM1 CH1–CH4 → RPWM 4 bánh.
-  - TIM3 CH1–CH4 → LPWM 4 bánh.
+- HCLK = 72 MHz; TIM1 và TIM3 nhận clock 72 MHz.
+- Prescaler = 0, ARR = 3599 ⇒ `72 MHz / 3600 = 20 kHz`.
+- TIM1 CH1–CH4 → RPWM; TIM3 CH1–CH4 → LPWM.
 
-## 3. Đấu BTS7960 (mỗi động cơ một module)
+## 5. Kế hoạch connector
 
-| BTS7960 | Nối |
+| Ký hiệu | Chức năng | Loại đề xuất |
+|---|---|---|
+| J1 | Pin vào | XT60 (đực trên robot) |
+| J2 | Bus 12 V | Terminal bắt vít 2P hoặc XT60 |
+| J3–J6 | Động cơ M+/M− | Terminal bắt vít 2P trên BTS7960 |
+| J7 | Bus 5 V | Terminal 2P |
+| J8 | Bus 3,3 V | Terminal 2P |
+| J9 | ST-Link | Header 1×4 2,54 mm |
+| J10 | ESP-01S | Header 2×4 2,54 mm |
+| J11–J14 | Động cơ + encoder | JST-XH 6P hoặc Dupont 6P |
+| J15 | USB-UART | Header 1×4 (TX, RX, GND) |
+| J16 | Blue Pill 5V/GND | Terminal 2P |
+
+- Dùng **cọc trụ đồng 40 mm** (16 cái trong BOM) để gá Blue Pill, 4 module BTS7960, các buck và ESP lên khung mica; tránh chạm mass giữa các board.
+- Xiết terminal bằng ferrule/đầu cos trước khi hàn dây 14 AWG.
+
+## 6. Quy ước màu dây
+
+| Nhóm | Màu |
 |---|---|
-| VCC | 5 V logic |
-| GND | GND chung |
-| VM | 12 V từ buck động cơ |
-| GND (power) | GND pin |
-| RPWM | Chân RPWM tương ứng STM32 |
-| LPWM | Chân LPWM tương ứng STM32 |
-| R_EN | 5 V (hoặc điều khiển enable nếu có) |
-| L_EN | 5 V |
-| M+ / M- | Hai cực động cơ |
+| Pin + / bus 12 V | Đỏ (14 AWG) |
+| GND | Đen (14–22 AWG) |
+| Bus 5 V | Đỏ (20–22 AWG) |
+| Bus 3,3 V | Cam (22–24 AWG) |
+| Encoder A | Xanh lá |
+| Encoder B | Xanh dương |
+| PWM | Trắng / xám |
+| UART TX | Xanh lá |
+| UART RX | Xanh dương |
 
-Lưu ý:
+Luôn dán nhãn hai đầu dây; không chỉ dựa vào màu.
 
-- Một số module BTS7960 có sẵn level shifter/regulator 5 V; kiểm tra mức logic đầu vào. Nếu module yêu cầu 5 V logic, dùng level shifter 3.3 V → 5 V cho RPWM/LPWM.
-- **Không** nối thẳng 12 V vào chân logic.
-- Đặt tụ 1000 µF gần mỗi module hoặc gần thanh phân phối 12 V để giảm sụt áp khi đổi chiều.
-- Thêm cầu chì tổng (ví dụ 15 A) và công tắc dừng khẩn cấp cắt nguồn VM.
+## 7. Nối đất và chống nhiễu
 
-## 4. Encoder Hall
+- Điểm sao GND tại **cực âm pin/BMS**; mọi GND quay về đây.
+- Tách **power GND** (pin, buck, BTS7960 power, động cơ) và **logic GND** (Blue Pill, ESP, encoder, BTS7960 logic); nối hai phần tại đúng một điểm.
+- Không cho dòng động cơ chạy qua dây GND logic.
+- Dây động cơ xoắn đôi; dây encoder xoắn đôi và đi xa dây động cơ; nếu bắt buộc giao nhau thì vuông góc.
+- Nếu cáp encoder dài > 30 cm, dùng cáp có vỏ bọc, nối shield một đầu về GND.
+- Đặt tụ gốm 100 nF sát chân VCC/GND của Blue Pill, ESP và mỗi encoder.
 
-Mỗi động cơ JGB37-520 có 6 dây thường gặp:
+## 8. Checklist trước khi cấp nguồn
 
-| Dây | Chức năng |
-|---|---|
-| M1 / M2 | Động cơ |
-| VCC | 5 V (theo datasheet động cơ) |
-| GND | GND |
-| A | Xung kênh A |
-| B | Xung kênh B |
+- [ ] Đo 12 V, 5 V, 3,3 V bằng đồng hồ **trước khi** cắm Blue Pill/ESP.
+- [ ] Kiểm tra cực tính pin, XT60, terminal.
+- [ ] Đã nối GND chung (pin, buck, BTS, STM32, ESP, encoder).
+- [ ] Cầu chì 15 A và E-STOP hoạt động, cắt được VM 12 V.
+- [ ] Điện áp ra cầu chia encoder ≤ 3,3 V ở cả hai mức.
+- [ ] Không có 5 V trên bất kỳ chân ESP-01S.
+- [ ] ST-Link không nối 5 V; động cơ OFF khi nạp.
+- [ ] BTS7960 R_EN/L_EN = 5 V; RPWM/LPWM đúng mức logic.
+- [ ] Lần đầu cấp nguồn nên dùng nguồn bench có giới hạn dòng.
+- [ ] Kiểm tra chiều quay từng bánh trước khi đặt robot xuống đất.
 
-Đấu A/B qua level shifter hoặc cầu chia áp về 3.3 V trước khi vào STM32.
-Ví dụ cầu chia: 10 kΩ từ tín hiệu 5 V xuống chân STM32, 20 kΩ từ chân STM32 xuống GND → 3.33 V.
-Với tần số xung thấp (< 10 kHz mỗi kênh), cầu chia thụ động đủ dùng; nếu cần chống nhiễu, dùng 74LVC245 hoặc optocoupler tốc độ cao.
+## 9. Vật tư bổ sung khuyến nghị
 
-Nếu động cơ quay nhưng RPM hiển thị âm, đặt `ENCx_INVERT 1` trong `firmware/include/board.h`.
+Các mục dưới đây **chưa có trong BOM hiện tại** nhưng cần cho hệ thống dây an toàn/ổn định:
 
-## 5. Nguồn
-
-```
-Pin Li-ion 5S 18 V (21 V khi sạc đầy)
-   │
-   ├── Cầu chì + công tắc E-STOP
-   │
-   ├── Buck 21 V → 12 V / dòng lớn ──► VM 4 × BTS7960
-   │
-   ├── Buck 21 V → 5 V / ≥3 A ──────► Blue Pill 5V, logic BTS7960, encoder VCC
-   │
-   └── Buck 5 V → 3.3 V / >500 mA ──► ESP8266 (ESP-01S)
-```
-
-- Buck 12 V phải chịu dòng khởi động lớn của 4 động cơ; dùng dây 14 AWG cho nhánh nguồn động cơ.
-- ESP8266 không lấy nguồn từ chân 3V3 của Blue Pill; dùng buck 3.3 V riêng.
-- Nối chung GND giữa tất cả các khối.
-- Đo điện áp thực trước khi cắm ESP8266/STM32.
-- Thêm tụ bulk và tụ gốm tại đầu vào mỗi buck.
-
-## 6. UART với ESP8266 hoặc laptop
-
-### 6.1 ESP8266 ESP-01S (WiFi)
-
-| ESP-01S | STM32 / nguồn |
-|---|---|
-| VCC | 3.3 V từ buck (không dùng 5 V) |
-| GND | GND chung |
-| TX | PA3 (USART2_RX) |
-| RX | PA2 (USART2_TX) |
-| CH_PD / EN | 3.3 V |
-| GPIO0 | 3.3 V khi chạy bình thường |
-| GPIO2 | để trống hoặc 3.3 V |
-
-- ESP8266 dùng logic 3.3 V; PA2/PA3 của STM32 cũng 3.3 V nên có thể nối trực tiếp.
-- Không cấp 5 V vào VCC hoặc chân tín hiệu của ESP-01S.
-- Cấu hình ESP làm cầu nối trong suốt TCP ↔ UART: xem [esp8266.md](esp8266.md).
-- Host kết nối mặc định `192.168.4.1:8080` bằng `python3 main.py --tcp 192.168.4.1:8080`.
-
-### 6.2 USB-UART có dây
-
-Dùng USB-UART CP2102/CH340 ở mức 3.3 V:
-
-| USB-UART | STM32 |
-|---|---|
-| TX | PA3 (USART2_RX) |
-| RX | PA2 (USART2_TX) |
-| GND | GND |
-
-Thiết bị thường là `/dev/ttyUSB0` trên Linux, `COMx` trên Windows.
-Kiểm tra bằng:
-
-```bash
-python3 -m serial.tools.miniterm /dev/ttyUSB0 115200
-```
-
-## 7. Những chân nên tránh
-
-- PA13/PA14: SWDIO/SWCLK, giữ cho nạp/debug.
-- PA15, PB3, PB4: JTAG mặc định; nếu cần dùng phải remap SWJ.
-- PA0/PA1/PA4/PA5/PA12, PB5, PB14/PB15: đang để trống, có thể dùng cho nút nhấn, relay enable, IMU trong tương lai.
+| Vật tư | Thông số | SL | Ghi chú |
+|---|---|---|---|
+| Cầu chì + đế | 15 A ATO slow-blow | 1 | bắt buộc |
+| Nút dừng khẩn cấp | DC ≥ 20 A | 1 | bắt buộc |
+| Level shifter | 74HCT244 hoặc TXS0108E (8 kênh) | 1 | nếu BTS7960 cần logic 5 V |
+| Tụ 12 V | 1000 µF/25 V | 1–4 | gần BTS7960 |
+| Tụ 5 V | 470 µF/16 V + 100 nF | 1 bộ | đầu vào/ra LM2596 |
+| Tụ 3,3 V | 470 µF/10 V + 100 nF | 1 bộ | sát ESP-01S |
+| Điện trở chia áp | 10 kΩ + 20 kΩ | 8 bộ | cho 8 dây encoder |
+| Dây 12 AWG | đỏ/đen | 0,5 m | nếu nhánh pin > 0,5 m |
+| Cầu chì nhánh | 5 A slow-blow | 4 | tùy chọn, bảo vệ từng động cơ |
+| Co nhiệt / đầu cos | phù hợp 14 AWG | 1 bộ | chống chập, đứt sợi |

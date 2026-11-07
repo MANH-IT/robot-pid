@@ -20,13 +20,13 @@ DIM = "#67717b"
 ACCENT = "#0969da"
 ACCENT_HOVER = "#0550ae"
 GREEN = "#1a7f37"
-YELLOW = "#9a6700"
+YELLOW = "#f57c00"
 RED = "#cf222e"
 PURPLE = "#8250df"
 INPUT = "#ffffff"
 TROUGH = "#eaeef2"
 CHART_BG = "#ffffff"
-WHEEL_COLORS = ("#0969da", "#1a7f37", "#9a6700", "#8250df")
+WHEEL_COLORS = ("#e53935", "#1565c0", "#f6c026", "#00838f")
 
 DIRECTION_KEYS = {
     "w": "forward",
@@ -68,8 +68,21 @@ class RobotGUI(object):
         self.root.grid_columnconfigure(0, weight=1)
 
         families = set(tkfont.families(self.root))
-        self.font_family = "Segoe UI" if "Segoe UI" in families else "DejaVu Sans"
-        self.mono_family = "Consolas" if "Consolas" in families else "DejaVu Sans Mono"
+        # Prioritize fonts that support Vietnamese diacritics
+        self.font_family = (
+            "Arial"
+            if "Arial" in families
+            else "Times New Roman" if "Times New Roman" in families
+            else "Segoe UI" if "Segoe UI" in families
+            else "DejaVu Sans"
+        )
+        self.mono_family = (
+            "Consolas"
+            if "Consolas" in families
+            else "DejaVu Sans Mono"
+            if "DejaVu Sans Mono" in families
+            else "Courier New"
+        )
 
         self._build_style()
         self._build_header()
@@ -86,6 +99,9 @@ class RobotGUI(object):
         except tk.TclError:
             pass
         style.configure(".", font=(self.font_family, 10), background=BG, foreground=TEXT)
+        style.configure("TEntry", font=(self.font_family, 10))
+        style.configure("TSpinbox", font=(self.font_family, 10))
+        style.configure("TScale", font=(self.font_family, 10))
         style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(0, 0, 0, 0))
         style.configure(
             "TNotebook.Tab",
@@ -226,6 +242,7 @@ class RobotGUI(object):
         self.status_dot.pack(side="left", padx=(0, 7))
         self._status_dot_id = self.status_dot.create_oval(2, 2, 10, 10, fill=MUTED, outline="")
         self.status_var = tk.StringVar(value="Đang khởi tạo...")
+        self.pin_var = tk.StringVar(value="Pin: --V")
         self.status_label = tk.Label(
             line,
             textvariable=self.status_var,
@@ -234,6 +251,14 @@ class RobotGUI(object):
             font=(self.font_family, 10, "bold"),
         )
         self.status_label.pack(side="left")
+        self.pin_label = tk.Label(
+            line,
+            textvariable=self.pin_var,
+            bg=HEADER_BG,
+            fg=MUTED,
+            font=(self.font_family, 9),
+        )
+        self.pin_label.pack(side="left", padx=(8, 0))
         self.age_var = tk.StringVar(value="telemetry --")
         self._label(line, "", size=9, color=DIM, bg=HEADER_BG, textvariable=self.age_var).pack(
             side="left", padx=(12, 0)
@@ -403,6 +428,8 @@ class RobotGUI(object):
         self._label(body, "", size=9, mono=True, color=MUTED, textvariable=self.distance_var).pack(
             anchor="w", pady=(4, 0)
         )
+        # Thêm dòng hiển thị đơn vị rõ ràng
+        self._label(body, "(m cho x,y; deg cho θ)", size=7, color=DIM, bg=CARD_ALT).pack(anchor="w", pady=(4, 0))
         self._button(
             body,
             "Reset odometry",
@@ -958,12 +985,22 @@ class RobotGUI(object):
         if snapshot["connected"] and fresh:
             status = "MÔ PHỎNG" if self.simulated else "ĐÃ KẾT NỐI"
             color = YELLOW if self.simulated else GREEN
+            # Đặt lại màu E-STOP khi có kết nối
+            self._estop_button_color = GREEN
         elif snapshot["connected"]:
             status = "CHỜ TELEMETRY"
             color = YELLOW
+            self._estop_button_color = YELLOW
         else:
             status = "MẤT KẾT NỐI"
             color = RED
+            # Nhấp nháy E-STOP khi mất kết nối
+            if not hasattr(self, '_estop_blink') or self._estop_blink:
+                self._estop_button_color = RED
+                self._estop_blink = not self._estop_blink
+            else:
+                self._estop_button_color = BG
+                self._estop_blink = not self._estop_blink
         self.status_var.set(status)
         self.status_label.configure(fg=color)
         self.status_dot.itemconfig(self._status_dot_id, fill=color)
