@@ -36,7 +36,8 @@ Upload mặc định dùng ST-Link.
 #define WHEEL_RADIUS_M 0.04f
 #define WHEELBASE_M 0.25f
 #define TRACK_WIDTH_M 0.20f
-#define ENCODER_CPR 1320.0f   /* 11 PPR × 30 × 4 (bánh 1–3); bánh 4 hiệu dụng 660 CPR (x2) */
+#define ENCODER_CPR 1320.0f   /* bánh 1–3, x4 (11×30×4) */
+#define ENCODER4_CPR 660.0f   /* bánh 4, x2 (11×30×2) */
 #define MAX_WHEEL_RPM 333.0f
 #define PWM_TIM_ARR 3599u     /* 72 MHz / 20 kHz - 1 */
 #define ROBOT_CONTROL_PERIOD_MS 10u

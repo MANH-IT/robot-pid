@@ -240,7 +240,7 @@ Dòng qua cầu chia ≈ 5 / 30 kΩ ≈ 0,167 mA
 - Dùng cặp dây xoắn A/B, tránh song song sát dây động cơ.
 - Nếu encoder là open-collector, bật pull-up nội trong firmware (đã bật `GPIO_PULLUP`) hoặc thêm 10 kΩ lên 3,3 V sau cầu chia.
 - Nếu RPM hiển thị âm khi bánh tiến: đặt `ENCx_INVERT 1` trong `firmware/include/board.h`.
-- Bánh 1–3 dùng encoder mode phần cứng TIM2/TIM3/TIM4 nên đếm x4 (**1320 CPR**). Bánh 4 (RR) chỉ có EXTI trên kênh A (PB8), kênh B (PB9) đọc thụ động ⇒ **thực tế đếm x2 (660 CPR hiệu dụng)**, RPM báo thấp khoảng một nửa. Cần sửa firmware (thêm EXTI cho PB9 hoặc dùng timer encoder) hoặc thêm hệ số bù riêng cho bánh 4 trước khi dùng odometry.
+- Bánh 1–3 dùng encoder mode phần cứng TIM2/TIM3/TIM4 nên đếm x4 (**1320 CPR**). Bánh 4 (RR) chỉ có EXTI trên kênh A (PB8), kênh B (PB9) đọc thụ động ⇒ **thực tế đếm x2**; firmware dùng **ENCODER4_CPR = 660** nên RPM vẫn báo đúng, nhưng độ phân giải chỉ bằng một nửa. Muốn x4 đầy đủ, cần cấu hình thêm EXTI cho PB9 hoặc dùng timer encoder trước khi dùng odometry.
 
 ### 4.6 ST-Link V2
 
@@ -317,6 +317,7 @@ Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**. Chân PB1, PB10, PB11 
 | Pull | Pull-up nội trong STM32 |
 
 - Khi E-STOP mở/đóng về GND, firmware vào `control_emergency_stop()`: dừng PWM ngay và chốt cờ dừng.
+- Ở boot: nếu pin PB0 đang LOW (nút E-STOP đang giữ), `main.c` gọi `control_emergency_stop()` ngay sau khi khởi tạo → firmware chốt dừng trước khi chạy.
 - Cờ dừng không có lệnh UART để clear; chỉ được xóa khi khởi động lại firmware (nhấn nút reset MCU hoặc cắt nguồn hoàn toàn).
 - Nên dùng E-STOP **hai lớp**: tiếp điểm công suất cắt 12 V động cơ + tiếp điểm tín hiệu về PB0.
 - Không đưa điện áp 12 V/5 V trực tiếp vào PB0; chỉ dùng tiếp điểm khô nối GND.

@@ -42,7 +42,7 @@ Pin Li-ion 5S 18 V (21 V khi đầy) 4 Ah + BMS
 ## Ghi chú
 
 - Công tắc 3 chân ≥ 20 A dùng làm công tắc nguồn/E-STOP, nhưng **không thay thế cầu chì**. Cầu chì tổng, tụ lọc nguồn, level shifter (nếu driver cần logic 5 V cho 4 PWM + 4 DIR) và điện trở chia áp encoder chưa có trong BOM; xem [pinout.md](pinout.md) mục 9.
-- Firmware có ngõ E-STOP trên PB0/EXTI0 và chốt dừng cho tới khi khởi động lại firmware (reset MCU hoặc cắt nguồn); nên đấu thêm một tiếp điểm E-STOP về PB0–GND bên cạnh tiếp điểm cắt 12 V.
+- Firmware có ngõ E-STOP trên PB0/EXTI0: chốt dừng khi có cạnh xuống, và chốt dừng ngay ở boot nếu nút đang giữ; chỉ reset MCU hoặc cắt nguồn mới chạy lại; nên đấu thêm một tiếp điểm E-STOP về PB0–GND bên cạnh tiếp điểm cắt 12 V.
 - Buck 12 V phải chịu được dòng khởi động lớn của 4 động cơ (12,8 A stall); dùng dây 14 AWG cho nhánh nguồn động cơ.
 - NodeMCU V3 thay ESP-01S: firmware `esp8266/src/main.cpp` dùng UART1 (GPIO13/RX, GPIO15/TX), 115200 8N1, logic 3,3 V; có USB CH340G để nạp firmware.
 - Cấp nguồn NodeMCU V3 qua **VIN 5 V** (regulator onboard) hoặc USB. Nếu cấp 3,3 V trực tiếp vào chân 3V3 thì **ngắt USB** để tránh backfeed; không cấp 5 V vào chân 3V3.

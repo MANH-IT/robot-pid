@@ -73,9 +73,9 @@ Nếu lắp bánh khiến chiều đi ngang bị đảo, đặt `vy_inverted=Tru
 ## 4. Đo tốc độ
 
 - Encoder: JGB37-520 Hall 2 kênh A/B. Mỗi vòng motor có 11 PPR; sau hộp giảm tốc 1:30 và giải mã x4: `11 × 30 × 4 = 1320 CPR` (bánh 1–3).
-- Bánh 4 hiện chỉ giải mã x2 nên CPR hiệu dụng là `11 × 30 × 2 = 660`; xem bảng bên dưới.
+- Bánh 4 hiện chỉ giải mã x2 nên CPR hiệu dụng là `11 × 30 × 2 = 660` (`ENCODER4_CPR`); xem bảng bên dưới.
 - Chu kỳ đo `dt = 10 ms`.
-- `RPM = Δcount · 60 / (CPR · dt)`, với `CPR = 1320` cho bánh 1–3.
+- `RPM = Δcount · 60 / (CPR · dt)`, với `CPR = 1320` cho bánh 1–3 và `660` cho bánh 4.
 
 Cách đọc trong firmware hiện tại:
 
@@ -86,7 +86,7 @@ Cách đọc trong firmware hiện tại:
 | 3 – RL | TIM4, PB6/PB7 | Encoder phần cứng TI12 | x4 |
 | 4 – RR | EXTI8 PB8, B đọc qua PB9 | Giải mã mềm, **chỉ ngắt cạnh A** | **x2 (660 CPR)** |
 
-> **Hạn chế đã biết:** bánh 4 chỉ đếm 2 cạnh mỗi chu kỳ encoder (x2, tương đương 660 CPR) trong khi firmware vẫn dùng chung `ENCODER_CPR = 1320` (giá trị x4). Vì vậy RPM báo cho bánh 4 chỉ bằng khoảng một nửa thực tế. Muốn đúng x4, cần cấu hình thêm EXTI cho kênh B (PB9) hoặc dùng timer khác; nếu giữ nguyên code, phải sửa firmware để dùng CPR riêng (hoặc nhân đôi delta) cho bánh 4.
+> **Đã sửa:** bánh 4 chỉ đếm 2 cạnh mỗi chu kỳ encoder (x2) nên firmware dùng CPR riêng `ENCODER4_CPR = 660` cho bánh 4 — RPM báo đúng, nhưng độ phân giải chỉ bằng một nửa. Muốn x4 hoàn toàn, cần cấu hình thêm EXTI cho kênh B (PB9) hoặc dùng timer khác; nếu giữ nguyên code, RPM đã đúng nhưng định lượng yếu hơn (nhiễu hơn).
 
 Timer encoder dùng `TIM_ENCODERMODE_TI12`, bộ lọc `IC1Filter = IC2Filter = 6`.
 
@@ -120,6 +120,7 @@ Thông số mặc định trong `robot_config.h` chỉ để khởi động: `Kp
 - Ngõ vào PB0 / EXTI0, cạnh xuống, pull-up nội.
 - Ngắt gọi `control_emergency_stop()`: đặt `emergency_flag = 1`, dừng tất cả PWM, reset PID và setpoint.
 - Trong `control_step()`, khi `emergency_flag` bật thì mọi lệnh chuyển động bị bỏ qua và PWM giữ 0.
+- Ở boot: `main.c` kiểm tra mức pin E-STOP; nếu đang LOW (nút giữ) → chốt dừng ngay.
 - Cờ này không có lệnh UART để clear; chỉ được xóa khi khởi động lại firmware (nhấn nút reset MCU hoặc cắt nguồn hoàn toàn).
 - Nên dùng E-STOP hai lớp: cắt nguồn động cơ bằng tiếp điểm công suất và đưa tín hiệu về PB0.
 
@@ -137,7 +138,7 @@ y += (vx·sinθ + vy·cosθ)·dt
 
 ## 9. Giới hạn và hướng phát triển
 
-- Encoder 4 chỉ giải mã x2 (xem mục 4); cần sửa firmware (thêm EXTI kênh B hoặc dùng timer) trước khi tin odometry.
+- Bánh 4 chỉ giải mã x2 (xem mục 4); RPM đã báo đúng (CPR riêng 660) nhưng độ phân giải/nhiễu kém hơn — muốn x4 cần EXTI kênh B hoặc timer.
 - Firmware PWM+DIR chưa tương thích trực tiếp với BTS7960 (xem mục 6).
 - E-STOP chốt tới khi khởi động lại firmware (reset MCU hoặc cắt nguồn); chưa có lệnh clear từ host.
 - Chưa có IMU; odometry sẽ trôi khi bánh trượt.

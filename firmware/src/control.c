@@ -11,6 +11,7 @@ extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 
 static Encoder encoders[4];
+static const float encoder_cpr[4] = { ENCODER_CPR, ENCODER_CPR, ENCODER_CPR, ENCODER4_CPR };
 static PidController pids[4];
 static float target_rpm[4];
 static float actual_rpm[4];
@@ -134,7 +135,7 @@ void control_step(float dt, uint8_t enabled)
 
     for (index = 0u; index < 4u; index++) {
         int32_t delta = encoder_take_delta(&encoders[index]);
-        actual_rpm[index] = (float)delta * 60.0f / (ENCODER_CPR * dt);
+        actual_rpm[index] = (float)delta * 60.0f / (encoder_cpr[index] * dt);
     }
 
     pid_dt = dt > 0.05f ? 0.05f : dt;

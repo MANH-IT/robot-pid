@@ -25,23 +25,21 @@
 
 /* Encoder:
  * - ENCODER_CPR = 1320 (11 PPR × 30 × 4) cho bánh 1–3
- * - Bánh 4 hiệu dụng 660 CPR (x2) vì chỉ ngắt cạnh A
- * - MAX_WHEEL_RPM = 333 (JGB37-520 12V)
- * - ENC4_SW_QUADRATURE: 1 = dùng software x4 (hiện tại chỉ x2) */
-#define ENCODER_CPR         1320.0f  /* counts/vòng trục ra (11×30×4) */
+ * - ENCODER4_CPR = 660 (x2) cho bánh 4 vì chỉ ngắt cạnh A
+ *   (RPM báo đúng, nhưng độ phân giải chỉ bằng một nửa)
+ * - MAX_WHEEL_RPM = 333 (JGB37-520 12V) */
+#define ENCODER_CPR         1320.0f  /* counts/vòng trục ra, bánh 1–3 (x4) */
+#define ENCODER4_CPR        660.0f   /* counts/vòng trục ra, bánh 4 (x2) */
 #define MAX_WHEEL_RPM       333.0f   /* JGB37-520 12V */
-#define ENC4_SW_QUADRATURE  1u       /* 1 = encoder 4 dùng software x4 */
 
 /* Đảo chiều nếu cần (sau khi test thực tế) */
 #define VY_INVERTED         0
 #define OMEGA_INVERTED      0
 
 /* PWM:
- * - ARR = 3599, prescaler = 0 → 72 MHz / 3600 = 20 kHz
- * - PWM_MAX_DUTY: giới hạn duty (1.0 = 100%) */
+ * - ARR = 3599, prescaler = 0 → 72 MHz / 3600 = 20 kHz */
 #define PWM_TIM_ARR         3599u    /* 72 MHz / 20 kHz - 1 */
 #define PWM_FREQUENCY_HZ    20000u
-#define PWM_MAX_DUTY        1.0f     /* 1.0 = 100%, 0.7 = 70% nếu cần giới hạn */
 
 /* PID:
  * - Kp, Ki, Kd: hệ số P/I/D mặc định
@@ -58,11 +56,10 @@
 #define PID_D_FILTER_ALPHA  0.30f
 #define DEADZONE_DEFAULT    0.08f
 
-/* Bảo vệ & an toàn:
- * - MOTOR_CURRENT_LIMIT_A: dòng stall JGB37-520 (~5 A)
- * - ESTOP_DEBOUNCE_MS: chống dội nút E-STOP */
-#define MOTOR_CURRENT_LIMIT_A   5.0f    /* dòng kẹp JGB37-520 */
-#define ESTOP_DEBOUNCE_MS       20u     /* chống dội nút E-stop */
+/* An toàn:
+ * - E-STOP trên PB0 (EXTI0, cạnh xuống, pull-up).
+ *   - Ở boot: main.c kiểm tra mức pin; nếu LOW → chốt emergency_flag.
+ *   - Cờ emergency_flag chỉ xóa khi khởi động lại firmware. */
 
 /* UART & Protocol:
  * - Baudrate 115200

@@ -150,7 +150,7 @@ Chi tiết: [docs/uart_protocol.md](docs/uart_protocol.md).
 | Khối | Linh kiện |
 |---|---|
 | Động cơ | 4 × JGB37-520 12 V, 333 RPM, hộp giảm tốc 1:30 |
-| Encoder | Hall 2 kênh A/B: 11 PPR × hộp giảm tốc 1:30 × 4 = **1320 CPR** (bánh 1–3); bánh 4 hiện chỉ giải mã x2 = **660 CPR hiệu dụng** — xem [docs/architecture.md](docs/architecture.md) |
+| Encoder | Hall 2 kênh A/B: 11 PPR × hộp giảm tốc 1:30 × 4 = **1320 CPR** (bánh 1–3); bánh 4 thuộc x2 (**ENCODER4_CPR = 660**) — RPM báo đúng, độ phân giải chỉ x2 — xem [docs/architecture.md](docs/architecture.md) |
 | Bánh | Mecanum đường kính 80 mm, R = 0.04 m |
 | Driver | 4 × cầu H (BOM ghi BTS7960); firmware hiện xuất **PWM + DIR**, xem cảnh báo tương thích trong [docs/pinout.md](docs/pinout.md) |
 | MCU | STM32F103C8T6 Blue Pill |
@@ -163,7 +163,7 @@ Sơ đồ chân và cảnh báo mức điện áp: [docs/pinout.md](docs/pinout.
 
 ## Hiệu chuẩn bắt buộc trên robot thật
 
-Thông số lý thuyết chỉ là điểm khởi đầu. Giá trị khởi điểm trong `firmware/include/robot_config.h`: `Kp = 0.0035`, `Ki = 0.015`, `Kd = 0.00015`, dead-zone `0.08`, `MAX_WHEEL_RPM = 333`, `ENCODER_CPR = 1320`. Cần đo:
+Thông số lý thuyết chỉ là điểm khởi đầu. Giá trị khởi điểm trong `firmware/include/robot_config.h`: `Kp = 0.0035`, `Ki = 0.015`, `Kd = 0.00015`, dead-zone `0.08`, `MAX_WHEEL_RPM = 333`, `ENCODER_CPR = 1320`, `ENCODER4_CPR = 660`. Cần đo:
 
 1. Dead-zone PWM từng bánh, riêng chiều tiến/lùi.
 2. Đặc tính PWM → RPM có tải và không tải.
@@ -178,7 +178,7 @@ Quy trình chi tiết: [docs/calibration.md](docs/calibration.md).
 - Encoder Hall thường dùng 5 V. **Không nối trực tiếp vào STM32 3,3 V** nếu chưa kiểm tra; dùng level shifter hoặc cầu chia áp.
 - Nối chung GND giữa pin, buck, STM32, driver, ESP8266 và USB-UART.
 - ESP8266 (NodeMCU V3) dùng logic 3,3 V, cấp qua VIN 5 V hoặc buck 3,3 V đủ dòng (đỉnh ~500 mA); không lấy từ chân 3V3 của Blue Pill.
-- E-STOP có hai lớp: cắt nguồn động cơ và ngõ vào PB0/EXTI0 của STM32. Firmware **chốt** trạng thái dừng (`emergency_flag`); cờ chỉ được xóa khi reset MCU (nút reset) hoặc cắt nguồn hoàn toàn, không có lệnh UART để clear.
+- E-STOP có hai lớp: cắt nguồn động cơ và ngõ vào PB0/EXTI0 của STM32. Firmware **chốt** trạng thái dừng (`emergency_flag`) khi có cạnh xuống; nếu nút E-STOP đang giữ (LOW) tại thời điểm boot, firmware cũng chốt dừng ngay. Cờ chỉ được xóa khi reset MCU (nút reset) hoặc cắt nguồn hoàn toàn, không có lệnh UART để clear.
 - Khi hiệu chuẩn PID, kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực an toàn.
 - Luôn có nút dừng khẩn cấp vật lý cắt nguồn động cơ.
 

@@ -171,6 +171,7 @@ Các dòng lệnh không hợp lệ không được tính là "alive".
 
 - Chân PB0 là ngõ vào E-STOP (EXTI0, cạnh xuống, pull-up nội). Tiếp điểm E-STOP nối PB0–GND.
 - Khi kích hoạt, firmware gọi `control_emergency_stop()`: dừng PWM ngay, reset PID, đặt setpoint 0 và bật cờ `emergency_flag`.
+- Ở boot: nếu PB0 đang LOW (nút E-STOP đang giữ), `main.c` chốt dừng ngay từ đầu.
 - Cờ này **chốt** cho tới khi khởi động lại firmware: mọi lệnh `V`, `R`, `M` sau đó đều bị bỏ qua; `STOP` cũng không xóa cờ.
 - Cách duy nhất để chạy lại là reset MCU (nút reset) hoặc cắt nguồn hoàn toàn.
 - Telemetry vẫn tiếp tục gửi 50 Hz với RPM thực và setpoint 0.

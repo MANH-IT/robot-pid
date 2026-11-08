@@ -41,6 +41,10 @@ int main(void)
     MX_USART2_UART_Init();
 
     control_init();
+    /* Nếu nút E-STOP đang giữ (LOW) tại thời điểm boot, chốt dừng ngay */
+    if (HAL_GPIO_ReadPin(ESTOP_PORT, ESTOP_PIN) == GPIO_PIN_RESET) {
+        control_emergency_stop();
+    }
     protocol_init();
 
     HAL_UART_Receive_IT(&huart2, &rx_byte, 1u);
