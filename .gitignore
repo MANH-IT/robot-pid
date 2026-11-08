@@ -10,3 +10,9 @@ firmware/.pio/
 *.onnx
 *.engine
 .DS_Store
+
+# Junk files
+cd
+pio
+*.bak
+platformio-core-installer-develop/
