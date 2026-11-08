@@ -5,7 +5,7 @@ Thông số trong repo là điểm khởi đầu. Robot chỉ chạy tốt sau k
 ## 0. Chuẩn bị an toàn
 
 1. Kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực trống, không có người.
-2. Có công tắc dừng khẩn cấp cắt nguồn 12 V động cơ; nếu đấu thêm E-STOP về PB0, lưu ý firmware sẽ **chốt dừng tới khi reset nguồn**.
+2. Có công tắc dừng khẩn cấp cắt nguồn 12 V động cơ; nếu đấu thêm E-STOP về PB0, lưu ý firmware sẽ **chốt dừng cho tới khi khởi động lại firmware** (reset MCU hoặc cắt nguồn).
 3. Kiểm tra chiều quay bánh trước khi cho robot chạy trên mặt đất.
 4. Mở GUI:
 

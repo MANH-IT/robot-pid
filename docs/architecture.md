@@ -43,7 +43,7 @@ ESP8266 chỉ là cầu nối byte trong suốt, không xử lý giao thức. M�
 5. Mỗi 20 ms: gửi `T,...` gồm RPM thực và RPM đặt.
 6. Host parse telemetry, cập nhật đồ thị và odometry.
 7. Nếu quá 500 ms không có lệnh hợp lệ, STM32 dừng động cơ.
-8. Nếu có cạnh xuống trên chân E-STOP (PB0), STM32 dừng ngay và **chốt** trạng thái dừng cho tới khi reset nguồn.
+8. Nếu có cạnh xuống trên chân E-STOP (PB0), STM32 dừng ngay và **chốt** trạng thái dừng cho tới khi khởi động lại firmware (reset MCU hoặc cắt nguồn hoàn toàn).
 
 ## 3. Động học nghịch Mecanum
 
@@ -72,9 +72,10 @@ Nếu lắp bánh khiến chiều đi ngang bị đảo, đặt `vy_inverted=Tru
 
 ## 4. Đo tốc độ
 
-- Encoder: JGB37-520 Hall 2 kênh A/B, 1320 xung/vòng trục ra sau giải mã x4.
+- Encoder: JGB37-520 Hall 2 kênh A/B. Mỗi vòng motor có 11 PPR; sau hộp giảm tốc 1:30 và giải mã x4: `11 × 30 × 4 = 1320 CPR` (bánh 1–3).
+- Bánh 4 hiện chỉ giải mã x2 nên CPR hiệu dụng là `11 × 30 × 2 = 660`; xem bảng bên dưới.
 - Chu kỳ đo `dt = 10 ms`.
-- `RPM = Δcount · 60 / (1320 · dt)`.
+- `RPM = Δcount · 60 / (CPR · dt)`, với `CPR = 1320` cho bánh 1–3.
 
 Cách đọc trong firmware hiện tại:
 
@@ -83,9 +84,9 @@ Cách đọc trong firmware hiện tại:
 | 1 – FL | TIM2, PA0/PA1 | Encoder phần cứng TI12 | x4 |
 | 2 – FR | TIM3, PA6/PA7 | Encoder phần cứng TI12 | x4 |
 | 3 – RL | TIM4, PB6/PB7 | Encoder phần cứng TI12 | x4 |
-| 4 – RR | EXTI8 PB8, B đọc qua PB9 | Giải mã mềm, **chỉ ngắt cạnh A** | **x2** |
+| 4 – RR | EXTI8 PB8, B đọc qua PB9 | Giải mã mềm, **chỉ ngắt cạnh A** | **x2 (660 CPR)** |
 
-> **Hạn chế đã biết:** bánh 4 chỉ đếm 2 cạnh mỗi chu kỳ encoder (x2) trong khi vẫn dùng chung `ENCODER_CPR = 1320` (giá trị x4). Vì vậy RPM báo cho bánh 4 chỉ bằng khoảng một nửa thực tế. Muốn đúng x4, cần cấu hình thêm EXTI cho kênh B (PB9) hoặc dùng timer khác; nếu giữ nguyên code, phải sửa firmware để dùng CPR riêng (hoặc nhân đôi delta) cho bánh 4.
+> **Hạn chế đã biết:** bánh 4 chỉ đếm 2 cạnh mỗi chu kỳ encoder (x2, tương đương 660 CPR) trong khi firmware vẫn dùng chung `ENCODER_CPR = 1320` (giá trị x4). Vì vậy RPM báo cho bánh 4 chỉ bằng khoảng một nửa thực tế. Muốn đúng x4, cần cấu hình thêm EXTI cho kênh B (PB9) hoặc dùng timer khác; nếu giữ nguyên code, phải sửa firmware để dùng CPR riêng (hoặc nhân đôi delta) cho bánh 4.
 
 Timer encoder dùng `TIM_ENCODERMODE_TI12`, bộ lọc `IC1Filter = IC2Filter = 6`.
 
@@ -100,7 +101,7 @@ Mỗi bánh có một `PidController`:
 - Bù dead-zone: cộng `Dz` cùng dấu với setpoint khi đầu ra cùng dấu, giúp động cơ vượt ma sát tĩnh.
 - Đầu ra chuẩn hóa `[-1, 1]`, sau đó map sang compare `0..3599` của timer.
 
-Thông số mặc định chỉ để khởi động. Bắt buộc hiệu chuẩn trên robot thật.
+Thông số mặc định trong `robot_config.h` chỉ để khởi động: `Kp = 0.0035`, `Ki = 0.015`, `Kd = 0.00015`, dead-zone `0.08`, `MAX_WHEEL_RPM = 333`. Bắt buộc hiệu chuẩn trên robot thật.
 
 ## 6. PWM và driver
 
@@ -112,14 +113,14 @@ Thông số mặc định chỉ để khởi động. Bắt buộc hiệu chuẩ
 - Dừng/coast: PWM = 0.
 - `motor_brake_all()` hiện không được dùng; với sơ đồ PWM+DIR nó sẽ cho `DIR = 1` + PWM = 100%, tức chạy lùi hết ga chứ không phải phanh.
 
-> **Cảnh báo tương thích:** firmware hiện xuất **1 PWM + 1 DIR cho mỗi bánh**. Module BTS7960 trong BOM cần **2 kênh PWM riêng (RPWM và LPWM)**. Đấu DIR trực tiếp vào LPWM sẽ không đảo chiều đúng (cả hai đầu vào cùng mức cao → phanh). Nếu dùng BTS7960, phải đổi firmware sang chế độ 8 PWM như thiết kế cũ (khi đó TIM3 không còn cho encoder bánh 2 và phải remap E-STOP khỏi PB0), hoặc dùng driver hỗ trợ PWM+DIR.
+> **Cảnh báo tương thích:** firmware hiện xuất **1 PWM + 1 DIR cho mỗi bánh**. `motor.c` **không có lớp ánh xạ** `DIR` sang cặp `RPWM/LPWM`; nó chỉ đặt mức chân DIR và giữ PWM trên TIM1. Module BTS7960 trong BOM cần **2 kênh PWM riêng (RPWM và LPWM)**. Đấu DIR trực tiếp vào LPWM sẽ không đảo chiều đúng (cả hai đầu vào cùng mức cao → phanh). Nếu dùng BTS7960, phải đổi firmware sang chế độ 8 PWM như thiết kế cũ (khi đó TIM3 không còn cho encoder bánh 2 và phải remap E-STOP khỏi PB0), hoặc dùng driver hỗ trợ PWM+DIR.
 
 ## 7. E-STOP
 
 - Ngõ vào PB0 / EXTI0, cạnh xuống, pull-up nội.
 - Ngắt gọi `control_emergency_stop()`: đặt `emergency_flag = 1`, dừng tất cả PWM, reset PID và setpoint.
 - Trong `control_step()`, khi `emergency_flag` bật thì mọi lệnh chuyển động bị bỏ qua và PWM giữ 0.
-- Cờ này **không được xóa trong firmware**; cần reset nguồn/vi điều khiển để chạy lại.
+- Cờ này không có lệnh UART để clear; chỉ được xóa khi khởi động lại firmware (nhấn nút reset MCU hoặc cắt nguồn hoàn toàn).
 - Nên dùng E-STOP hai lớp: cắt nguồn động cơ bằng tiếp điểm công suất và đưa tín hiệu về PB0.
 
 ## 8. Odometry
@@ -138,7 +139,7 @@ y += (vx·sinθ + vy·cosθ)·dt
 
 - Encoder 4 chỉ giải mã x2 (xem mục 4); cần sửa firmware (thêm EXTI kênh B hoặc dùng timer) trước khi tin odometry.
 - Firmware PWM+DIR chưa tương thích trực tiếp với BTS7960 (xem mục 6).
-- E-STOP chốt vĩnh viễn tới khi reset nguồn; chưa có lệnh clear từ host.
+- E-STOP chốt tới khi khởi động lại firmware (reset MCU hoặc cắt nguồn); chưa có lệnh clear từ host.
 - Chưa có IMU; odometry sẽ trôi khi bánh trượt.
 - Chưa có PID vị trí/heading; hiện tại là vòng kín tốc độ.
 - WiFi thêm độ trễ và jitter so với USB-UART; timeout 500 ms vẫn bảo vệ robot nhưng nên ưu tiên USB-UART khi hiệu chuẩn PID.

@@ -5,7 +5,7 @@ Thiết kế dây dưới đây được tính lại theo **BOM hiện tại** (
 - Pin Li-ion 5S 4 Ah (18 V danh định, 21 V khi đầy) có BMS.
 - Buck 20 A: 21 V → 12 V cho 4 × driver cầu H.
 - LM2596: 21 V → 5 V / 3 A cho Blue Pill, logic driver, encoder.
-- Buck 3.3 V: 5 V → 3.3 V / > 500 mA cho ESP8266 (hoặc cấp NodeMCU qua Vin 5 V).
+- Buck 3,3 V: 5 V → 3,3 V / > 500 mA cho ESP8266 (hoặc cấp NodeMCU qua VIN 5 V).
 - 4 × JGB37-520 12 V 333 RPM + encoder Hall; 4 × driver cầu H; STM32F103C8T6.
 
 > Các giá trị dòng của động cơ là **giả thiết tiêu biểu**, phải đối chiếu datasheet lô hàng thực tế. Nếu sai khác nhiều, tính lại theo mục 2.
@@ -22,7 +22,7 @@ Pin 5S 18 V (21 V đầy) 4 Ah + BMS
    Buck 20 A 21V→12V              LM2596 21V→5V                 Buck 3.3V
         │                                │                        (5V→3.3V)
    Bus 12 V                         Bus 5 V                          │
-        │                          ┌─────┼──────────┐           Bus 3.3 V
+        │                          ┌─────┼──────────┐           Bus 3,3 V
         │                          │     │          │                │
    4 × driver VM            Blue Pill 5V  Driver VCC Encoder VCC  NodeMCU V3
         │                          │         │          │             │
@@ -34,7 +34,7 @@ Pin 5S 18 V (21 V đầy) 4 Ah + BMS
 Nguyên tắc:
 
 - Cầu chì và E-STOP nằm **ngay sau pin**, trước mọi buck.
-- Buck 12 V chỉ nuôi động cơ; buck 5 V nuôi logic; buck 3.3 V chỉ nuôi ESP.
+- Buck 12 V chỉ nuôi động cơ; buck 5 V nuôi logic; buck 3,3 V chỉ nuôi ESP.
 - Tất cả GND nối về **một điểm sao** tại cực âm pin/BMS.
 
 ## 2. Tính toán phụ tải và chọn nguồn
@@ -60,13 +60,13 @@ Nguyên tắc:
 | 5 V | Blue Pill | 0,05 A | 0,05 A |
 | 5 V | 4 × logic driver cầu H | 0,06 A | 0,06 A |
 | 5 V | 4 × encoder Hall | 0,08 A | 0,08 A |
-| 5 V | Đầu vào buck 3.3 V | 0,27 A | 0,39 A |
+| 5 V | Đầu vào buck 3,3 V | 0,27 A | 0,39 A |
 | **5 V** | **Tổng** | **0,46 A** | **0,58 A** |
 | 3,3 V | ESP8266 / NodeMCU V3 | 0,08 A | 0,35 A (thiết kế 0,5 A) |
 
 ### 2.3 Dòng pin và thời gian chạy
 
-Dùng hiệu suất thực tế: buck 12 V ≈ 0,90; LM2596 ≈ 0,78; buck 3.3 V ≈ 0,85.
+Dùng hiệu suất thực tế: buck 12 V ≈ 0,90; LM2596 ≈ 0,78; buck 3,3 V ≈ 0,85.
 
 ```
 Chế độ định mức:
@@ -94,7 +94,7 @@ Lưu ý:
 
 - Buck 12 V 20 A là đủ cho stall ngắn hạn; không chạy stall liên tục.
 - LM2596 3 A chỉ đạt 3 A khi tản nhiệt tốt; tải thực 0,58 A nên không cần heatsink lớn.
-- Buck 3.3 V loại "> 500 mA" đang sát đỉnh ESP; nếu mua mới nên chọn **≥ 1 A**.
+- Buck 3,3 V loại "> 500 mA" đang sát đỉnh ESP; nếu mua mới nên chọn **≥ 1 A**.
 
 ## 3. Chọn dây và cầu chì
 
@@ -148,7 +148,7 @@ Kiểm tra: 15 A > 9,4 A đỉnh và ≤ ampacity 14 AWG (15 A); dòng định m
 
 ### 4.2 Bus 12 V → driver cầu H → động cơ
 
-Firmware hiện tại điều khiển mỗi bánh bằng **1 kênh PWM + 1 chân DIR**.
+Firmware hiện tại điều khiển mỗi bánh bằng **1 kênh PWM + 1 chân DIR**. `motor.c` chỉ đặt mức chân DIR và giữ PWM trên TIM1; **không có lớp ánh xạ** `DIR` sang cặp `RPWM/LPWM`.
 
 | Driver | Nối |
 |---|---|
@@ -191,26 +191,26 @@ Lưu ý mức logic:
 | Blue Pill | Chân 5V và GND |
 | 4 × driver VCC (logic) | 5 V (nếu module yêu cầu) |
 | 4 × encoder VCC | 5 V |
-| Buck 3.3 V input | 5 V |
+| Buck 3,3 V input | 5 V |
 
 - Dùng dây 20–22 AWG, nối hình sao từ bus 5 V, tránh daisy-chain dài.
 - Đặt **470 µF/16 V + 100 nF** tại đầu vào LM2596 và đầu ra 5 V.
 
-### 4.4 Bus 3.3 V → ESP8266 (NodeMCU V3)
+### 4.4 Bus 3,3 V → ESP8266 (NodeMCU V3)
 
 Firmware bridge hiện tại chạy trên **NodeMCU V3** (`env:nodemcuv2`), dùng UART1:
 
 | NodeMCU V3 | Nối |
 |---|---|
-| Vin (5 V) | Bus 5 V (khuyến nghị, qua regulator onboard) |
-| 3V3 | Chỉ dùng khi đã ngắt USB; không cấp đồng thời Vin và 3V3 |
+| VIN (5 V) | Bus 5 V (khuyến nghị, qua regulator onboard) |
+| 3V3 | Chỉ dùng khi đã ngắt USB; không cấp đồng thời VIN và 3V3 |
 | GND | GND chung |
 | GPIO13 (RX) | PA2 (USART2_TX của STM32) |
 | GPIO15 (TX) | PA3 (USART2_RX của STM32) |
 | EN / CH_PD | 3,3 V (module đã kéo sẵn) |
 | GPIO0 | 3,3 V khi chạy bình thường |
 
-- NodeMCU V3 có thể hút ~300–500 mA khi phát WiFi; dùng buck 3,3 V ≥ 1 A nếu không cấp qua Vin.
+- NodeMCU V3 có thể hút ~300–500 mA khi phát WiFi; dùng buck 3,3 V ≥ 1 A nếu không cấp qua VIN.
 - Đặt **470 µF/10 V + 100 nF** sát chân nguồn của module để chịu đỉnh dòng WiFi.
 - PA2/PA3 của STM32 là 3,3 V nên nối trực tiếp TX↔RX (chéo).
 - **ESP-01S không dùng được với sketch hiện tại** vì ESP-01S không có GPIO13/GPIO15. Nếu vẫn dùng ESP-01S, phải sửa `esp8266/src/main.cpp` sang UART0 (GPIO1/GPIO3) và nạp qua USB-TTL 3,3 V.
@@ -234,12 +234,13 @@ Vout = 5 × 20 / (10 + 20) = 3,33 V
 Dòng qua cầu chia ≈ 5 / 30 kΩ ≈ 0,167 mA
 ```
 
+- Encoder 11 PPR motor; sau hộp giảm tốc 1:30 = 330 xung/vòng trục ra mỗi kênh; giải mã x4 = **1320 CPR**.
 - Tần số xung mỗi kênh: `333/60 × 330 ≈ 1,83 kHz` (chu kỳ ≈ 546 µs).
 - Nếu cần lọc nhiễu, chỉ dùng tụ **≤ 100 pF** (với 6,67 kΩ cho fc ≈ 240 kHz). **Không dùng 100 nF** vì sẽ lọc mất xung.
 - Dùng cặp dây xoắn A/B, tránh song song sát dây động cơ.
 - Nếu encoder là open-collector, bật pull-up nội trong firmware (đã bật `GPIO_PULLUP`) hoặc thêm 10 kΩ lên 3,3 V sau cầu chia.
 - Nếu RPM hiển thị âm khi bánh tiến: đặt `ENCx_INVERT 1` trong `firmware/include/board.h`.
-- Bánh 1–3 dùng encoder mode phần cứng TIM2/TIM3/TIM4 nên đếm x4. Bánh 4 (RR) chỉ có EXTI trên kênh A (PB8), kênh B (PB9) đọc thụ động ⇒ **thực tế đếm x2**, RPM báo thấp khoảng một nửa. Cần sửa firmware (thêm EXTI cho PB9 hoặc dùng timer encoder) hoặc thêm hệ số bù riêng cho bánh 4 trước khi dùng odometry.
+- Bánh 1–3 dùng encoder mode phần cứng TIM2/TIM3/TIM4 nên đếm x4 (**1320 CPR**). Bánh 4 (RR) chỉ có EXTI trên kênh A (PB8), kênh B (PB9) đọc thụ động ⇒ **thực tế đếm x2 (660 CPR hiệu dụng)**, RPM báo thấp khoảng một nửa. Cần sửa firmware (thêm EXTI cho PB9 hoặc dùng timer encoder) hoặc thêm hệ số bù riêng cho bánh 4 trước khi dùng odometry.
 
 ### 4.6 ST-Link V2
 
@@ -316,7 +317,7 @@ Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**. Chân PB1, PB10, PB11 
 | Pull | Pull-up nội trong STM32 |
 
 - Khi E-STOP mở/đóng về GND, firmware vào `control_emergency_stop()`: dừng PWM ngay và chốt cờ dừng.
-- Cờ dừng chỉ được xóa khi reset nguồn/vi điều khiển; không có lệnh UART để chạy lại sau E-STOP.
+- Cờ dừng không có lệnh UART để clear; chỉ được xóa khi khởi động lại firmware (nhấn nút reset MCU hoặc cắt nguồn hoàn toàn).
 - Nên dùng E-STOP **hai lớp**: tiếp điểm công suất cắt 12 V động cơ + tiếp điểm tín hiệu về PB0.
 - Không đưa điện áp 12 V/5 V trực tiếp vào PB0; chỉ dùng tiếp điểm khô nối GND.
 
@@ -370,7 +371,7 @@ Luôn dán nhãn hai đầu dây; không chỉ dựa vào màu.
 - [ ] Đã nối GND chung (pin, buck, BTS, STM32, ESP, encoder).
 - [ ] Cầu chì 15 A và E-STOP hoạt động, cắt được VM 12 V.
 - [ ] Điện áp ra cầu chia encoder ≤ 3,3 V ở cả hai mức.
-- [ ] Không cấp đồng thời Vin 5 V và 3V3 cho NodeMCU.
+- [ ] Không cấp đồng thời VIN 5 V và 3V3 cho NodeMCU.
 - [ ] ST-Link không nối 5 V; động cơ OFF khi nạp.
 - [ ] Driver đúng loại PWM+DIR (hoặc đã đổi firmware sang RPWM/LPWM nếu dùng BTS7960).
 - [ ] E-STOP nối PB0–GND hoạt động, firmware dừng và chốt.
