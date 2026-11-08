@@ -30,6 +30,11 @@ static void mark_alive(void)
     has_rx = 1u;
 }
 
+/* Parser số thực từ chuỗi text:
+ * - text: chuỗi đầu vào
+ * - values: mảng chứa kết quả
+ * - max_values: số lượng tối đa
+ * Trả về số lượng số thực đã parse, -1 nếu lỗi */
 static int parse_floats(const char *text, float *values, int max_values)
 {
     const char *cursor = text;
@@ -62,6 +67,10 @@ static int parse_floats(const char *text, float *values, int max_values)
     return count;
 }
 
+/* Kiểm tra giá trị hợp lệ:
+ * - Không NaN
+ * - Trong khoảng [-1e6, 1e6]
+ * Trả về 1 nếu hợp lệ, 0 nếu không */
 static int values_are_sane(const float *values, int count)
 {
     int index;
@@ -74,6 +83,10 @@ static int values_are_sane(const float *values, int count)
     return 1;
 }
 
+/* Gửi text qua UART:
+ * - tx_busy: flag đang gửi
+ * - tx_buffer: buffer TX
+ * - HAL_UART_Transmit_IT: gửi async */
 static void send_text(const char *text)
 {
     size_t length;
@@ -91,6 +104,15 @@ static void send_text(const char *text)
     }
 }
 
+/* Xử lý một dòng lệnh từ host:
+ * - STOP: dừng motor
+ * - PING: trả PONG
+ * - P: chỉnh PID
+ * - D: chỉnh dead-zone
+ * - M: PWM thủ công
+ * - V: lệnh vận tốc
+ * - R: lệnh RPM trực tiếp
+ * - Nếu không có tiền tố: parse số và tự động phân loại */
 static void handle_line(char *line)
 {
     float values[5];
@@ -172,6 +194,11 @@ static void handle_line(char *line)
     }
 }
 
+/* Khởi tạo protocol:
+ * - Reset ring buffer
+ * - Reset line buffer
+ * - Reset tx_busy
+ * - Đặt last_rx_ms = HAL_GetTick() */
 void protocol_init(void)
 {
     rx_head = 0u;
@@ -183,6 +210,9 @@ void protocol_init(void)
     has_rx = 0u;
 }
 
+/* Nhận byte từ UART ISR:
+ * - Đưa byte vào ring buffer
+ * - Nếu ring buffer đầy: bỏ qua (không blocking) */
 void protocol_rx_byte(uint8_t byte)
 {
     uint16_t next = (uint16_t)((rx_head + 1u) % RX_RING_SIZE);
@@ -192,6 +222,11 @@ void protocol_rx_byte(uint8_t byte)
     }
 }
 
+/* Xử lý ring buffer:
+ * - Lấy byte từ ring buffer
+ * - Nếu '\n': parse line và xử lý
+ * - Nếu '\r': bỏ qua
+ * - Nếu khác: thêm vào line_buffer */
 void protocol_process(void)
 {
     while (rx_tail != rx_head) {
@@ -220,6 +255,10 @@ void protocol_process(void)
     }
 }
 
+/* Kiểm tra host còn sống:
+ * - Nếu chưa nhận byte nào: false
+ * - Nếu quá timeout (500 ms): false
+ * - Ngược lại: true */
 uint8_t protocol_is_alive(uint32_t now_ms)
 {
     if (!has_rx) {
@@ -241,6 +280,10 @@ static long rpm_x10(float rpm)
     return (long)(rpm * 10.0f - 0.5f);
 }
 
+/* Gửi telemetry về host:
+ * - Format: T,<t_ms>,<rpm_act x4>,<rpm_set x4>
+ * - RPM nhân 10 để tránh printf float
+ * - Nếu tx_busy: bỏ qua */
 void protocol_send_telemetry(uint32_t now_ms)
 {
     float actual[4];
@@ -269,6 +312,7 @@ void protocol_send_telemetry(uint32_t now_ms)
     }
 }
 
+/* Callback TX complete: đặt tx_busy = 0 */
 void protocol_tx_complete(void)
 {
     tx_busy = 0u;

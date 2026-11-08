@@ -26,7 +26,7 @@ static float clampf(float value, float low, float high)
     return value;
 }
 
-void control_init(void)
+void control_init(void) // Khởi tạo encoder, PID, đặt emergency_flag = 0
 {
     uint8_t index;
 
@@ -61,6 +61,7 @@ void control_init(void)
 }
 
 void control_set_velocity(float vx, float vy, float omega)
+// Tính kinematic inverse: chuyển vận tốc thân (vx, vy, omega) thành RPM 4 bánh
 {
     float radius = WHEEL_RADIUS_M;
     float arm = YAW_ARM_M;
@@ -124,6 +125,7 @@ void control_set_wheel_rpm(const float rpm[4])
 }
 
 void control_step(float dt, uint8_t enabled)
+// Vòng lặp điều khiển 10 ms: đọc encoder, tính RPM, cập PID, điều khiển motor
 {
     uint8_t index;
     float pid_dt;
@@ -164,6 +166,7 @@ void control_step(float dt, uint8_t enabled)
 }
 
 void control_stop(void)
+// Dừng tất cả motor, reset target_rpm và PID
 {
     uint8_t index;
     manual_active = 0u;
@@ -175,6 +178,7 @@ void control_stop(void)
 }
 
 void control_emergency_stop(void)
+// Khẩn cấp: dừng PWM, đặt cờ emergency_flag, reset PID,setpoint
 {
     uint8_t index;
     emergency_flag = 1u;
@@ -187,6 +191,7 @@ void control_emergency_stop(void)
 }
 
 void control_set_manual(uint8_t index, float duty)
+// Đặt manual mode cho bánh index, duty [-1,1] điều khiển trực tiếp PWM
 {
     if (index >= 4u) return;
 
@@ -210,6 +215,7 @@ void control_encoder_isr(uint8_t index)
 }
 
 void control_get_actual_rpm(float out[4])
+// Đọc RPM thực tế của 4 bánh từ encoder
 {
     uint8_t index;
     for (index = 0u; index < 4u; index++) {
@@ -218,6 +224,7 @@ void control_get_actual_rpm(float out[4])
 }
 
 void control_get_target_rpm(float out[4])
+// Đọc target RPM được gửi từ host hoặc tính từ lệnh V
 {
     uint8_t index;
     for (index = 0u; index < 4u; index++) {
@@ -226,6 +233,7 @@ void control_get_target_rpm(float out[4])
 }
 
 void control_set_pid(uint8_t index, float kp, float ki, float kd)
+// Cập nhật gains PID cho bánh index, reset PID integral
 {
     if (index < 4u) {
         pid_set_gains(&pids[index], kp, ki, kd);
@@ -234,6 +242,7 @@ void control_set_pid(uint8_t index, float kp, float ki, float kd)
 }
 
 void control_set_deadzone(uint8_t index, float deadzone)
+// Cài đặt dead-zone cho bánh index (0..0.5)
 {
     if (index < 4u) {
         pid_set_deadzone(&pids[index], deadzone);

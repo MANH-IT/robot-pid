@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+/* ============================================================
+ * MOTOR.H – API ĐIỀU KHIỂN MOTOR (PWM + DIR)
+ * - 4 motor: TIM1 CH1–CH4 + DIR PB12–PB15
+ * ============================================================ */
+
 void motor_init(void);
 void motor_set(uint8_t index, float command);
 void motor_stop_all(void);

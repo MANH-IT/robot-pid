@@ -113,7 +113,7 @@ python3 -m pytest -q
 
 NodeMCU V3 (ESP8266) chạy như cầu nối trong suốt: nhận byte TCP từ laptop và chuyển nguyên văn xuống UART2 của STM32, theo chiều ngược lại cho telemetry. Firmware có sẵn tại `esp8266/src/main.cpp` (PlatformIO, `env:nodemcuv2`).
 
-- ESP phát AP SSID `MecanumRobot`, mật khẩu `12345678`, IP `192.168.4.1`, TCP server cổng `8080`.
+- ESP phát AP SSID `MecanumRobot`, mật khẩu `12345678`, IP `192.168.4.1`, TCP server cổng `8080`. SSID/mật khẩu này chỉ dùng cho demo; đổi trước khi triển khai.
 - Mặc định host kết nối `192.168.4.1:8080`: `python3 main.py --tcp`.
 - Có thể chỉ định địa chỉ: `python3 main.py --tcp 192.168.1.50:8080`.
 - Nếu dùng USB-UART có dây, giữ `--port /dev/ttyUSB0`.
@@ -140,6 +140,8 @@ STM32 → Host, 50 Hz:
 T,<t_ms>,<rpm_actual_x10 x4>,<rpm_setpoint_x10 x4>\n
 ```
 
+`rpm_actual_x10` / `rpm_setpoint_x10` là RPM × 10 (số nguyên) để tránh in số thực trên MCU.
+
 Mất lệnh hợp lệ quá **500 ms** → STM32 đặt PWM = 0 và reset PID.
 Chi tiết: [docs/uart_protocol.md](docs/uart_protocol.md).
 
@@ -148,20 +150,20 @@ Chi tiết: [docs/uart_protocol.md](docs/uart_protocol.md).
 | Khối | Linh kiện |
 |---|---|
 | Động cơ | 4 × JGB37-520 12 V, 333 RPM, hộp giảm tốc 1:30 |
-| Encoder | Hall 2 kênh A/B, 1320 xung/vòng trục ra sau giải mã x4 (bánh 4 hiện chỉ giải mã x2 — xem [docs/architecture.md](docs/architecture.md)) |
+| Encoder | Hall 2 kênh A/B: 11 PPR × hộp giảm tốc 1:30 × 4 = **1320 CPR** (bánh 1–3); bánh 4 hiện chỉ giải mã x2 = **660 CPR hiệu dụng** — xem [docs/architecture.md](docs/architecture.md) |
 | Bánh | Mecanum đường kính 80 mm, R = 0.04 m |
 | Driver | 4 × cầu H (BOM ghi BTS7960); firmware hiện xuất **PWM + DIR**, xem cảnh báo tương thích trong [docs/pinout.md](docs/pinout.md) |
 | MCU | STM32F103C8T6 Blue Pill |
 | Giao tiếp | NodeMCU V3 ESP8266 cầu nối trong suốt UART, hoặc USB-UART có dây |
 | Host | Laptop/PC chạy Python 3 (Windows/Linux/macOS) |
-| Nguồn | Pin Li-ion 5S 18 V (21 V đầy) → buck 12 V (động cơ), buck 5 V (logic), buck 3.3 V (ESP8266) |
+| Nguồn | Pin Li-ion 5S 18 V danh định (21 V đầy) → buck 12 V (động cơ), buck 5 V (logic), buck 3,3 V (ESP8266) |
 
 Danh mục linh kiện đầy đủ (số lượng, trạng thái mua): [docs/bom.md](docs/bom.md).
 Sơ đồ chân và cảnh báo mức điện áp: [docs/pinout.md](docs/pinout.md).
 
 ## Hiệu chuẩn bắt buộc trên robot thật
 
-Thông số lý thuyết chỉ là điểm khởi đầu. Cần đo:
+Thông số lý thuyết chỉ là điểm khởi đầu. Giá trị khởi điểm trong `firmware/include/robot_config.h`: `Kp = 0.0035`, `Ki = 0.015`, `Kd = 0.00015`, dead-zone `0.08`, `MAX_WHEEL_RPM = 333`, `ENCODER_CPR = 1320`. Cần đo:
 
 1. Dead-zone PWM từng bánh, riêng chiều tiến/lùi.
 2. Đặc tính PWM → RPM có tải và không tải.
@@ -173,10 +175,10 @@ Quy trình chi tiết: [docs/calibration.md](docs/calibration.md).
 
 ## An toàn
 
-- Encoder Hall thường dùng 5 V. **Không nối trực tiếp vào STM32 3.3 V** nếu chưa kiểm tra; dùng level shifter hoặc cầu chia áp.
+- Encoder Hall thường dùng 5 V. **Không nối trực tiếp vào STM32 3,3 V** nếu chưa kiểm tra; dùng level shifter hoặc cầu chia áp.
 - Nối chung GND giữa pin, buck, STM32, driver, ESP8266 và USB-UART.
-- ESP8266 (NodeMCU V3) dùng logic 3.3 V, cấp qua Vin 5 V hoặc buck 3.3 V đủ dòng (đỉnh ~500 mA); không lấy từ chân 3V3 của Blue Pill.
-- E-STOP có hai lớp: cắt nguồn động cơ và ngõ vào PB0/EXTI0 của STM32. Firmware **chốt** trạng thái dừng (`emergency_flag`), chỉ xóa khi reset nguồn.
+- ESP8266 (NodeMCU V3) dùng logic 3,3 V, cấp qua VIN 5 V hoặc buck 3,3 V đủ dòng (đỉnh ~500 mA); không lấy từ chân 3V3 của Blue Pill.
+- E-STOP có hai lớp: cắt nguồn động cơ và ngõ vào PB0/EXTI0 của STM32. Firmware **chốt** trạng thái dừng (`emergency_flag`); cờ chỉ được xóa khi reset MCU (nút reset) hoặc cắt nguồn hoàn toàn, không có lệnh UART để clear.
 - Khi hiệu chuẩn PID, kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực an toàn.
 - Luôn có nút dừng khẩn cấp vật lý cắt nguồn động cơ.
 

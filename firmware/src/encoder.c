@@ -1,6 +1,12 @@
 #include "encoder.h"
 #include "board.h"
 
+/* ============================================================
+ * ENCODER.H – API CHO 4 ENCODER JGB37-520
+ * - Encoder 1–3: TIM2/3/4 encoder mode (phần cứng)
+ * - Encoder 4:   EXTI8 + software quadrature decode
+ * ============================================================ */
+
 /* Khai báo extern các timer handle từ main.c */
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
@@ -14,6 +20,12 @@ static const int8_t quadrature_table[16] = {
      0,  1, -1,  0
 };
 
+/* Đọc trạng thái chân A và B của encoder:
+ * - a = 1 nếu HIGH, ngược lại 0
+ * - b = 1 nếu HIGH, ngược lại 0
+ * Trả về (a<<1)|b */
+///* Đọc trạng thái chân A/B của encoder và mã hóa thành giá trị 2-bit:
+ * a = bit 1, b = bit 0 => state = (a << 1) | b */
 static uint8_t read_state(Encoder *enc)
 {
     uint8_t a = (HAL_GPIO_ReadPin(enc->port_a, enc->pin_a) == GPIO_PIN_SET) ? 1u : 0u;
@@ -21,6 +33,12 @@ static uint8_t read_state(Encoder *enc)
     return (uint8_t)((a << 1) | b);
 }
 
+/* Khởi tạo encoder:
+ * - id: mã encoder (1..4)
+ * - timer: con trỏ TIM (NULL cho encoder phần mềm M4)
+ * - port/pin_a, port/pin_b: chân A/B của encoder
+ * - invert: đảo chiều đếm (0 = bình thường, 1 = đảo)
+ * Nếu timer != NULL, bật TIM encoder mode và reset counter. */
 void encoder_init(Encoder *enc, EncoderId id,
                   TIM_HandleTypeDef *timer,
                   GPIO_TypeDef *port_a, uint16_t pin_a,
@@ -44,6 +62,10 @@ void encoder_init(Encoder *enc, EncoderId id,
     }
 }
 
+/* Lấy delta (số xung thay đổi) của encoder:
+ * - Timer phần cứng: đọc __HAL_TIM_GET_COUNTER và xử lý tràn 16-bit.
+ * - Encoder phần mềm M4: đọc enc->sw_count (không reset ở đây để tránh lỗi RPM).
+ * Trả về delta đã áp dụng invert nếu cần. */
 int32_t encoder_take_delta(Encoder *enc)
 {
     int32_t current_count = 0;
@@ -72,6 +94,9 @@ int32_t encoder_take_delta(Encoder *enc)
     return enc->invert ? -delta : delta;
 }
 
+/* Tính RPM từ delta xung:
+ * RPM = (delta / CPR / dt_sec) * 60
+ * cpr = số xung mỗi vòng, dt_sec = thời gian giữa 2 lần đọc (s). */
 float encoder_get_rpm(Encoder *enc, int32_t delta, float cpr, float dt_sec)
 {
     (void)enc;
@@ -81,6 +106,10 @@ float encoder_get_rpm(Encoder *enc, int32_t delta, float cpr, float dt_sec)
     return ((float)delta / cpr / dt_sec) * 60.0f;
 }
 
+/* Xử lý cạnh encoder cho encoder phần mềm (M4):
+ * - Nếu timer != NULL: bỏ qua (encoder phần cứng xử lý).
+ * - Nếu timer == NULL: đọc trạng thái A/B, dùng bảng quadrature để tính delta
+ *   và cộng vào enc->sw_count. */
 void encoder_handle_edge(Encoder *enc)
 {
     uint8_t state;
@@ -99,6 +128,10 @@ void encoder_handle_edge(Encoder *enc)
     enc->prev_state = state;
 }
 
+/* Reset encoder:
+ * - Timer phần cứng: reset counter về 0.
+ * - Encoder phần mềm: reset sw_count về 0.
+ * - last_count về 0 (để lần đọc tiếp theo tính delta đúng). */
 void encoder_reset(Encoder *enc)
 {
     if (enc->timer != NULL) {

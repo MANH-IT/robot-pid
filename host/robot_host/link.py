@@ -17,6 +17,10 @@ from .protocol import (
 
 
 class RobotLink(object):
+    """Lớp liên kết chung giữa GUI và robot:
+    - Serial thật hoặc mô phỏng
+    - Quản lý telemetry, mode, target, odometry
+    - Thread-safe với lock"""
     def __init__(self, config):
         self.config = config
         self._lock = threading.Lock()

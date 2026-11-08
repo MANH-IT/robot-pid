@@ -9,6 +9,10 @@ from .protocol import format_stop, parse_telemetry
 
 
 class TcpLink(RobotLink):
+    """Liên kết TCP tới ESP8266 làm cầu nối trong suốt UART-WiFi.
+    - Reader thread: đọc telemetry từ TCP
+    - Writer thread: gửi lệnh 20 Hz
+    - Auto-reconnect khi mất kết nối"""
     def __init__(self, config):
         RobotLink.__init__(self, config)
         self._socket = None

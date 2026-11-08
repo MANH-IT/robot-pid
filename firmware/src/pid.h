@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+/* ============================================================
+ * PID.H – API PID CONTROLLER
+ * - Anti-windup, derivative-on-measurement
+ * - Dead-zone feedforward
+ * ============================================================ */
+
 typedef struct {
     float kp;
     float ki;

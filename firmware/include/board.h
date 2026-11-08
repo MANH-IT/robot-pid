@@ -5,6 +5,11 @@
 
 /* ============================================================
  * BOARD.H – ĐỊNH NGHĨA CHÂN CHO ROBOT MECANUM 4 BÁNH
+ * - Encoder: 3 timer phần cứng (TIM2/3/4) + 1 software (EXTI8)
+ * - Motor: TIM1 PWM 20 kHz + 4 DIR pins
+ * - UART: USART2 115200 bps
+ * - E-STOP: EXTI0 PB0
+ * - LED: PC13 (onboard, active low)
  * ============================================================ */
 
 /* ------------------------------------------------------------

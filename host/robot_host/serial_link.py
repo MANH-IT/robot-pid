@@ -8,6 +8,10 @@ from .protocol import format_stop, parse_telemetry
 
 
 class SerialLink(RobotLink):
+    """Liên kết UART thật tới STM32, tự động kết nối lại.
+    - Reader thread: đọc telemetry từ serial
+    - Writer thread: gửi lệnh 20 Hz
+    - Auto-reconnect khi mất kết nối"""
     def __init__(self, config):
         RobotLink.__init__(self, config)
         self._serial = None

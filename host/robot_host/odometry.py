@@ -6,6 +6,9 @@ from .kinematics import body_to_world, forward_kinematics
 
 
 class Pose(object):
+    """Vị trí robot:
+    - x, y: tọa độ (m)
+    - theta: góc yaw (rad)"""
     def __init__(self, x=0.0, y=0.0, theta=0.0):
         self.x = float(x)
         self.y = float(y)
@@ -19,6 +22,11 @@ class Pose(object):
 
 
 class Odometry(object):
+    """Tính odometry từ RPM thực tế của 4 bánh.
+    - pose: vị trí hiện tại (x, y, theta)
+    - last_t_ms: timestamp cuối cùng (ms)
+    - total_distance_m: tổng quãng đường (m)
+    - last_vx, last_vy, last_omega: vận tốc cuối cùng"""
     def __init__(self, config):
         self.config = config
         self.pose = Pose()
@@ -37,6 +45,10 @@ class Odometry(object):
         self.last_omega = 0.0
 
     def update(self, rpm_actual, t_ms):
+        """Cập nhật odometry từ RPM thực tế:
+        - rpm_actual: list 4 RPM [FL, FR, RL, RR]
+        - t_ms: timestamp từ telemetry (ms)
+        Trả về pose hiện tại"""
         if self.last_t_ms is None:
             self.last_t_ms = int(t_ms)
             return self.pose

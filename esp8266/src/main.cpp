@@ -1,12 +1,17 @@
 /*
  * ESP8266 BRIDGE – CẦU NỐI TCP ↔ UART CHO ROBOT MECANUM
- * 
+ *
  * Chức năng:
  * - Phát WiFi AP "MecanumRobot" (pass: 12345678)
  * - Lắng nghe TCP port 8080
  * - Chuyển byte TCP → UART2 (TX/RX với STM32)
  * - Chuyển byte UART2 → TCP (telemetry)
  * - Không xử lý logic, chỉ bridge trong suốt
+ *
+ * Kết nối:
+ * - GPIO13 (RX) ← PA2 (TX của STM32)
+ * - GPIO15 (TX) → PA3 (RX của STM32)
+ * - Debug: Serial (USB) @ 115200
  */
 
 #include <Arduino.h>

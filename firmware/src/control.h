@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+/* ============================================================
+ * CONTROL.H – API ĐIỀU KHIỂN ROBOT MECANUM
+ * - Khởi tạo encoder, PID, motor
+ * - Điều khiển vận tốc, RPM, manual, E-STOP
+ * ============================================================ */
+
 void control_init(void);
 void control_set_velocity(float vx, float vy, float omega);
 void control_set_wheel_rpm(const float rpm[4]);

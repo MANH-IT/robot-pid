@@ -4,6 +4,19 @@ import math
 
 
 class RobotConfig(object):
+    """Cấu hình robot:
+    - wheel_radius_m: bán kính bánh (m)
+    - wheelbase_m: khoảng cách trục trước-sau (m)
+    - track_width_m: khoảng cách bánh trái-phải (m)
+    - counts_per_rev: số xung mỗi vòng (1320)
+    - max_wheel_rpm: RPM tối đa (333)
+    - vy_inverted: đảo chiều đi ngang
+    - omega_inverted: đảo chiều xoay
+    - scale_to_limit: co lại nếu vượt max_rpm
+    - command_rate_hz: tần số gửi lệnh (20 Hz)
+    - telemetry_timeout_s: timeout telemetry (0.5 s)
+    - max_linear_speed: tốc độ tiến tối đa (m/s)
+    - max_angular_speed: tốc độ xoay tối đa (rad/s)"""
     def __init__(
         self,
         wheel_radius_m=0.04,

@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+/* ============================================================
+ * PROTOCOL.H – API UART PROTOCOL
+ * - Line-based text protocol
+ * - Telemetry 50 Hz
+ * ============================================================ */
+
 void protocol_init(void);
 void protocol_rx_byte(uint8_t byte);
 void protocol_process(void);

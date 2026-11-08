@@ -6,6 +6,7 @@
 
 extern TIM_HandleTypeDef htim1;
 
+/* Cấu trúc channel cho mỗi motor: PWM channel + DIR port/pin */
 typedef struct {
     uint32_t pwm_channel;
     GPIO_TypeDef *dir_port;
@@ -19,6 +20,10 @@ static const MotorChannel motors[4] = {
     { TIM_CHANNEL_4, MOTOR4_DIR_PORT, MOTOR4_DIR_PIN }
 };
 
+/* Khởi tạo 4 motor:
+ * - Bật PWM TIM1 cho mỗi bánh
+ * - Đặt compare = 0 (dừng)
+ * - Đặt DIR = RESET (tiến) */
 void motor_init(void)
 {
     uint8_t i;
@@ -29,6 +34,11 @@ void motor_init(void)
     }
 }
 
+/* Đặt duty cho motor index (0..3):
+ * - command > 0: tiến (DIR=RESET, PWM = duty)
+ * - command < 0: lùi (DIR=SET, PWM = |duty|)
+ * - command = 0: dừng (PWM = 0)
+ * duty được clamp trong [-1,1] và map sang compare 0..PWM_TIM_ARR */
 void motor_set(uint8_t index, float command)
 {
     float magnitude;
@@ -50,6 +60,7 @@ void motor_set(uint8_t index, float command)
     __HAL_TIM_SET_COMPARE(&htim1, motors[index].pwm_channel, compare);
 }
 
+/* Dừng tất cả motor: PWM = 0, DIR = RESET (coast) */
 void motor_stop_all(void)
 {
     uint8_t i;
@@ -59,6 +70,9 @@ void motor_stop_all(void)
     }
 }
 
+/* Phanh tất cả motor: DIR = SET + PWM = 100%
+ * **Lưu ý:** với sơ đồ PWM+DIR, đây thực chất là chạy lùi hết ga,
+ * không phải phanh thật. Chỉ dùng khi chắc chắn. */
 void motor_brake_all(void)
 {
     uint8_t i;

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+"""Entry point cho chương trình host:
+- parse_args: parse command line arguments
+- main: khởi động link (serial/tcp/sim) và GUI hoặc monitor"""
 import argparse
 import math
 import time

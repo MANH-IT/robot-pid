@@ -11,6 +11,10 @@ from .protocol import Telemetry
 
 
 class SimulatedLink(RobotLink):
+    """Mô phỏng robot để thử GUI/động học khi chưa có phần cứng.
+    - Mô phỏng PID với time constant
+    - Thêm nhiễu Gaussian
+    - Emit telemetry 50 Hz"""
     def __init__(self, config, time_constant_s=0.08, noise_rpm=0.8, seed=1):
         RobotLink.__init__(self, config)
         self.time_constant_s = float(time_constant_s)
