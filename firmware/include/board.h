@@ -5,15 +5,15 @@
 
 /* ============================================================
  * BOARD.H – ĐỊNH NGHĨA CHÂN CHO ROBOT MECANUM 4 BÁNH
- * - Encoder: 3 timer phần cứng (TIM2/3/4) + 1 software (EXTI8)
- * - Motor: TIM1 PWM 20 kHz + 4 DIR pins
+ * - Encoder: 2 timer phần cứng (TIM2/TIM4) + 2 software (EXTI8, EXTI10)
+ * - Motor: RPWM (TIM1) + LPWM (TIM3) 20 kHz — BTS7960
  * - UART: USART2 115200 bps
- * - E-STOP: EXTI0 PB0
+ * - E-STOP: EXTI0 PC0
  * - LED: PC13 (onboard, active low)
  * ============================================================ */
 
 /* ------------------------------------------------------------
- * 1. ENCODER – 3 TIMER PHẦN CỨNG + 1 EXTI SOFTWARE
+ * 1. ENCODER – 2 TIMER PHẦN CỨNG (TIM2/TIM4) + 2 EXTI SOFTWARE (EXTI10/EXTI8)
  * ------------------------------------------------------------ */
 
 /* --- Encoder M1 (Front Left) – TIM2 --- */
@@ -23,11 +23,11 @@
 #define ENC1_B_PIN          GPIO_PIN_1
 #define ENC1_INVERT         0u
 
-/* --- Encoder M2 (Front Right) – TIM3 --- */
-#define ENC2_A_PORT         GPIOA
-#define ENC2_A_PIN          GPIO_PIN_6
-#define ENC2_B_PORT         GPIOA
-#define ENC2_B_PIN          GPIO_PIN_7
+/* --- Encoder M2 (Front Right) – EXTI10/11 + software (giống bánh 4) --- */
+#define ENC2_A_PORT         GPIOB
+#define ENC2_A_PIN          GPIO_PIN_10
+#define ENC2_B_PORT         GPIOB
+#define ENC2_B_PIN          GPIO_PIN_11
 #define ENC2_INVERT         0u
 
 /* --- Encoder M3 (Rear Left) – TIM4 --- */
@@ -45,7 +45,7 @@
 #define ENC4_INVERT         0u
 
 /* ------------------------------------------------------------
- * 2. MOTOR PWM – TIM1_CH1..CH4 (20 kHz)
+ * 2. MOTOR RPWM – TIM1_CH1..CH4 (20 kHz) – BTS7960
  * ------------------------------------------------------------ */
 #define MOTOR1_PWM_PORT     GPIOA
 #define MOTOR1_PWM_PIN      GPIO_PIN_8
@@ -57,16 +57,16 @@
 #define MOTOR4_PWM_PIN      GPIO_PIN_11
 
 /* ------------------------------------------------------------
- * 3. MOTOR DIR – GPIO OUT (BTS7960 LPWM)
+ * 3. MOTOR LPWM – TIM3_CH1..CH4 (20 kHz) – BTS7960
  * ------------------------------------------------------------ */
-#define MOTOR1_DIR_PORT     GPIOB
-#define MOTOR1_DIR_PIN      GPIO_PIN_12
-#define MOTOR2_DIR_PORT     GPIOB
-#define MOTOR2_DIR_PIN      GPIO_PIN_13
-#define MOTOR3_DIR_PORT     GPIOB
-#define MOTOR3_DIR_PIN      GPIO_PIN_14
-#define MOTOR4_DIR_PORT     GPIOB
-#define MOTOR4_DIR_PIN      GPIO_PIN_15
+#define MOTOR1_LPWM_PORT    GPIOA
+#define MOTOR1_LPWM_PIN     GPIO_PIN_6    /* TIM3_CH1 */
+#define MOTOR2_LPWM_PORT    GPIOA
+#define MOTOR2_LPWM_PIN     GPIO_PIN_7    /* TIM3_CH2 */
+#define MOTOR3_LPWM_PORT    GPIOB
+#define MOTOR3_LPWM_PIN     GPIO_PIN_0    /* TIM3_CH3 */
+#define MOTOR4_LPWM_PORT    GPIOB
+#define MOTOR4_LPWM_PIN     GPIO_PIN_1    /* TIM3_CH4 */
 
 /* ------------------------------------------------------------
  * 4. UART2 – GIAO TIẾP NODEMCU V3
@@ -80,7 +80,7 @@
 /* ------------------------------------------------------------
  * 5. E-STOP – NGẮT KHẨN CẤP VẬT LÝ
  * ------------------------------------------------------------ */
-#define ESTOP_PORT          GPIOB
+#define ESTOP_PORT          GPIOC
 #define ESTOP_PIN           GPIO_PIN_0
 #define ESTOP_EXTI_IRQn     EXTI0_IRQn
 

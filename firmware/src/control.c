@@ -7,11 +7,10 @@
 #include "robot_config.h"
 
 extern TIM_HandleTypeDef htim2;
-extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 
 static Encoder encoders[4];
-static const float encoder_cpr[4] = { ENCODER_CPR, ENCODER_CPR, ENCODER_CPR, ENCODER4_CPR };
+static const float encoder_cpr[4] = { ENCODER_CPR, ENCODER4_CPR, ENCODER_CPR, ENCODER4_CPR };
 static PidController pids[4];
 static float target_rpm[4];
 static float actual_rpm[4];
@@ -35,7 +34,7 @@ void control_init(void) // Khởi tạo encoder, PID, đặt emergency_flag = 0
                  ENC1_A_PORT, ENC1_A_PIN,
                  ENC1_B_PORT, ENC1_B_PIN, ENC1_INVERT);
 
-    encoder_init(&encoders[1], ENCODER_2, &htim3,
+    encoder_init(&encoders[1], ENCODER_2, NULL,
                  ENC2_A_PORT, ENC2_A_PIN,
                  ENC2_B_PORT, ENC2_B_PIN, ENC2_INVERT);
 

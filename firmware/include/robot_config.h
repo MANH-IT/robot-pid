@@ -3,7 +3,7 @@
 
 /* ============================================================
  * ROBOT_CONFIG.H – THÔNG SỐ CẤU HÌNH ROBOT MECANUM 4 BÁNH
- * Cập nhật: Pinout mới (3 timer + 1 EXTI, 4 PWM + 4 DIR)
+ * Cập nhật: Pinout mới (2 timer + 2 EXTI, 8 PWM RPWM/LPWM BTS7960)
  * ============================================================ */
 
 /* Chu kỳ điều khiển & truyền thông:

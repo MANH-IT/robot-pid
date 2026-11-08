@@ -5,7 +5,7 @@ Thông số trong repo là điểm khởi đầu. Robot chỉ chạy tốt sau k
 ## 0. Chuẩn bị an toàn
 
 1. Kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực trống, không có người.
-2. Có công tắc dừng khẩn cấp cắt nguồn 12 V động cơ; nếu đấu thêm E-STOP về PB0, lưu ý firmware chốt dừng khi có cạnh xuống, và cũng chốt dừng ngay nếu nút đang giữ LOW tại thời điểm boot; chỉ reset MCU hoặc cắt nguồn mới chạy lại được.
+2. Có công tắc dừng khẩn cấp cắt nguồn 12 V động cơ; nếu đấu thêm E-STOP về PC0, lưu ý firmware chốt dừng khi có cạnh xuống, và cũng chốt dừng ngay nếu nút đang giữ LOW tại thời điểm boot; chỉ reset MCU hoặc cắt nguồn mới chạy lại được.
 3. Kiểm tra chiều quay bánh trước khi cho robot chạy trên mặt đất.
 4. Mở GUI:
 
@@ -203,7 +203,7 @@ Nếu không dừng, kiểm tra:
 - [ ] Đi ngang đúng chiều.
 - [ ] Xoay đúng chiều.
 - [ ] Timeout 500 ms hoạt động.
-- [ ] E-STOP vật lý hoạt động (cắt 12 V và/hoặc ngõ PB0 chốt dừng).
-- [ ] Driver tương thích firmware PWM+DIR (hoặc đã đổi firmware sang RPWM/LPWM nếu dùng BTS7960).
+- [ ] E-STOP vật lý hoạt động (cắt 12 V và/hoặc ngõ PC0 chốt dừng).
+- [ ] Driver BTS7960 tương thích trực tiếp với firmware (8 PWM RPWM/LPWM).
 - [ ] Encoder bánh 4 dùng CPR riêng 660 (RPM báo đúng; chấp nhận độ phân giải x2 hoặc đã nâng cấp lên x4).
 - [ ] Vùng chạy không có vật cản ngoài kịch bản test.

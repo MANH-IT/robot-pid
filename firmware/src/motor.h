@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 /* ============================================================
- * MOTOR.H – API ĐIỀU KHIỂN MOTOR (PWM + DIR)
- * - 4 motor: TIM1 CH1–CH4 + DIR PB12–PB15
+ * MOTOR.H – API ĐIỀU KHIỂN MOTOR (RPWM/LPWM BTS7960)
+ * - RPWM: TIM1 CH1–CH4 · LPWM: TIM3 CH1–CH4
  * ============================================================ */
 
 void motor_init(void);

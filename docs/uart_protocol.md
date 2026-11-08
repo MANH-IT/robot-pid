@@ -160,7 +160,7 @@ Gửi RPM ×10 để tránh printf số thực trên MCU, giảm flash và CPU.
 - Nếu `now - last_valid_rx > 500 ms`, firmware:
   - đặt setpoint 4 bánh = 0,
   - reset PID,
-  - đặt cả 4 kênh PWM = 0 (chân DIR về 0),
+  - đặt cả 8 kênh RPWM/LPWM = 0,
   - tiếp tục gửi telemetry.
 - Host gửi lệnh 20 Hz ngay cả khi robot đứng yên (`V,0,0,0`) để duy trì kết nối.
 - Sau timeout, cần một lệnh hợp lệ mới để chạy lại.
@@ -169,13 +169,13 @@ Các dòng lệnh không hợp lệ không được tính là "alive".
 
 ## 4.1 E-STOP phần cứng
 
-- Chân PB0 là ngõ vào E-STOP (EXTI0, cạnh xuống, pull-up nội). Tiếp điểm E-STOP nối PB0–GND.
+- Chân PC0 là ngõ vào E-STOP (EXTI0, cạnh xuống, pull-up nội). Tiếp điểm E-STOP nối PC0–GND.
 - Khi kích hoạt, firmware gọi `control_emergency_stop()`: dừng PWM ngay, reset PID, đặt setpoint 0 và bật cờ `emergency_flag`.
-- Ở boot: nếu PB0 đang LOW (nút E-STOP đang giữ), `main.c` chốt dừng ngay từ đầu.
+- Ở boot: nếu PC0 đang LOW (nút E-STOP đang giữ), `main.c` chốt dừng ngay từ đầu.
 - Cờ này **chốt** cho tới khi khởi động lại firmware: mọi lệnh `V`, `R`, `M` sau đó đều bị bỏ qua; `STOP` cũng không xóa cờ.
 - Cách duy nhất để chạy lại là reset MCU (nút reset) hoặc cắt nguồn hoàn toàn.
 - Telemetry vẫn tiếp tục gửi 50 Hz với RPM thực và setpoint 0.
-- Nên dùng E-STOP hai lớp: cắt 12 V động cơ bằng tiếp điểm công suất và đưa tín hiệu về PB0.
+- Nên dùng E-STOP hai lớp: cắt 12 V động cơ bằng tiếp điểm công suất và đưa tín hiệu về PC0.
 
 ## 5. Ví dụ một phiên
 

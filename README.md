@@ -2,7 +2,7 @@
 
 Robot di động 4 bánh Mecanum điều khiển phân tầng:
 
-- **Cấp thấp – STM32F103C8T6 (Blue Pill):** đọc 4 encoder Hall (TIM2/TIM3/TIM4 ở chế độ encoder + 1 bộ giải mã mềm qua EXTI), chạy 4 bộ PID vòng kín chu kỳ 10 ms, xuất 4 kênh PWM 20 kHz + 4 chân DIR cho driver cầu H, có ngắt E-STOP phần cứng, giao tiếp UART2 115200 bps và tự dừng sau 500 ms mất lệnh.
+- **Cấp thấp – STM32F103C8T6 (Blue Pill):** đọc 4 encoder Hall (TIM2/TIM4 ở chế độ encoder + 2 bộ giải mã mềm qua EXTI10/EXTI8), chạy 4 bộ PID vòng kín chu kỳ 10 ms, xuất 4 cặp RPWM/LPWM 20 kHz (8 kênh) cho driver BTS7960, có ngắt E-STOP phần cứng, giao tiếp UART2 115200 bps và tự dừng sau 500 ms mất lệnh.
 - **Cấp cao – Laptop/PC:** tính động học nghịch Mecanum, gửi lệnh vận tốc hoặc RPM, nhận telemetry 50 Hz, vẽ đồ thị và tính odometry. Kết nối robot qua USB-UART hoặc WiFi qua ESP8266 (cầu nối trong suốt UART-WiFi).
 
 ## Cấu trúc repo
@@ -11,13 +11,13 @@ Robot di động 4 bánh Mecanum điều khiển phân tầng:
 .
 ├── firmware/                 # PlatformIO + STM32Cube HAL
 │   ├── include/
-│   │   ├── board.h           # chân encoder, PWM/DIR, UART, E-STOP, LED
+│   │   ├── board.h           # chân encoder, RPWM/LPWM, UART, E-STOP, LED
 │   │   ├── robot_config.h    # hình học, CPR, PID mặc định, chu kỳ
 │   │   └── stm32f1xx_hal_conf.h
 │   ├── src/
 │   │   ├── main.c            # clock, GPIO, TIM PWM/encoder, UART, vòng lặp 10 ms
-│   │   ├── encoder.c/.h      # TIM2/3/4 phần cứng + giải mã mềm cho encoder 4
-│   │   ├── motor.c/.h        # PWM + DIR cho driver cầu H
+│   │   ├── encoder.c/.h      # TIM2/TIM4 phần cứng + giải mã mềm cho encoder 2 & 4
+│   │   ├── motor.c/.h        # RPWM + LPWM cho BTS7960
 │   │   ├── pid.c/.h          # PID anti-windup, derivative-on-measurement
 │   │   ├── control.c/.h      # 4 PID + động học nghịch + manual + E-STOP + timeout
 │   │   └── protocol.c/.h     # UART line protocol, telemetry
@@ -152,7 +152,7 @@ Chi tiết: [docs/uart_protocol.md](docs/uart_protocol.md).
 | Động cơ | 4 × JGB37-520 12 V, 333 RPM, hộp giảm tốc 1:30 |
 | Encoder | Hall 2 kênh A/B: 11 PPR × hộp giảm tốc 1:30 × 4 = **1320 CPR** (bánh 1–3); bánh 4 thuộc x2 (**ENCODER4_CPR = 660**) — RPM báo đúng, độ phân giải chỉ x2 — xem [docs/architecture.md](docs/architecture.md) |
 | Bánh | Mecanum đường kính 80 mm, R = 0.04 m |
-| Driver | 4 × cầu H (BOM ghi BTS7960); firmware hiện xuất **PWM + DIR**, xem cảnh báo tương thích trong [docs/pinout.md](docs/pinout.md) |
+| Driver | 4 × **BTS7960** (IBT-2); firmware xuất **RPWM + LPWM** trực tiếp — tương thích, xem [docs/pinout.md](docs/pinout.md) |
 | MCU | STM32F103C8T6 Blue Pill |
 | Giao tiếp | NodeMCU V3 ESP8266 cầu nối trong suốt UART, hoặc USB-UART có dây |
 | Host | Laptop/PC chạy Python 3 (Windows/Linux/macOS) |
@@ -178,7 +178,7 @@ Quy trình chi tiết: [docs/calibration.md](docs/calibration.md).
 - Encoder Hall thường dùng 5 V. **Không nối trực tiếp vào STM32 3,3 V** nếu chưa kiểm tra; dùng level shifter hoặc cầu chia áp.
 - Nối chung GND giữa pin, buck, STM32, driver, ESP8266 và USB-UART.
 - ESP8266 (NodeMCU V3) dùng logic 3,3 V, cấp qua VIN 5 V hoặc buck 3,3 V đủ dòng (đỉnh ~500 mA); không lấy từ chân 3V3 của Blue Pill.
-- E-STOP có hai lớp: cắt nguồn động cơ và ngõ vào PB0/EXTI0 của STM32. Firmware **chốt** trạng thái dừng (`emergency_flag`) khi có cạnh xuống; nếu nút E-STOP đang giữ (LOW) tại thời điểm boot, firmware cũng chốt dừng ngay. Cờ chỉ được xóa khi reset MCU (nút reset) hoặc cắt nguồn hoàn toàn, không có lệnh UART để clear.
+- E-STOP có hai lớp: cắt nguồn động cơ và ngõ vào PC0/EXTI0 của STM32. Firmware **chốt** trạng thái dừng (`emergency_flag`) khi có cạnh xuống; nếu nút E-STOP đang giữ (LOW) tại thời điểm boot, firmware cũng chốt dừng ngay. Cờ chỉ được xóa khi reset MCU (nút reset) hoặc cắt nguồn hoàn toàn, không có lệnh UART để clear.
 - Khi hiệu chuẩn PID, kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực an toàn.
 - Luôn có nút dừng khẩn cấp vật lý cắt nguồn động cơ.
 

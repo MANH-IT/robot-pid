@@ -148,7 +148,7 @@ Kiểm tra: 15 A > 9,4 A đỉnh và ≤ ampacity 14 AWG (15 A); dòng định m
 
 ### 4.2 Bus 12 V → driver cầu H → động cơ
 
-Firmware hiện tại điều khiển mỗi bánh bằng **1 kênh PWM + 1 chân DIR**. `motor.c` chỉ đặt mức chân DIR và giữ PWM trên TIM1; **không có lớp ánh xạ** `DIR` sang cặp `RPWM/LPWM`.
+Firmware điều khiển mỗi bánh bằng **RPWM + LPWM** (8 kênh) — tương thích trực tiếp BTS7960. `motor.c` xuất TIM1 (RPWM) và TIM3 (LPWM) 20 kHz; dừng = cả hai = 0; `motor_brake_all()` = cả hai 100% (phanh tích cực).
 
 | Driver | Nối |
 |---|---|
@@ -156,32 +156,27 @@ Firmware hiện tại điều khiển mỗi bánh bằng **1 kênh PWM + 1 chân
 | GND (power) | Power GND (điểm sao) |
 | VCC (logic) | 5 V logic (nếu module yêu cầu) |
 | GND (logic) | Logic GND |
-| EN (nếu có) | 5 V (qua 10 kΩ hoặc nối thẳng) |
-| PWM | PA8 / PA9 / PA10 / PA11 |
-| DIR | PB12 / PB13 / PB14 / PB15 |
+| EN (nếu có) | 5 V (qua 10 kΩ hoặc nối thẳng) — **phải BẬT** để motor chạy |
+| RPWM | PA8 / PA9 / PA10 / PA11 (TIM1_CH1–CH4) |
+| LPWM | PA6 / PA7 / PB0 / PB1 (TIM3_CH1–CH4) |
 | M+ / M− | Hai cực động cơ |
 
 Bảng ghép bánh và encoder:
 
-| Bánh | PWM | DIR | Encoder A | Encoder B |
+| Bánh | RPWM | LPWM | Encoder A | Encoder B |
 |---|---|---|---|---|
-| 1 – FL (trước-trái) | PA8 (TIM1_CH1) | PB12 | PA0 (TIM2_CH1) | PA1 (TIM2_CH2) |
-| 2 – FR (trước-phải) | PA9 (TIM1_CH2) | PB13 | PA6 (TIM3_CH1) | PA7 (TIM3_CH2) |
-| 3 – RL (sau-trái) | PA10 (TIM1_CH3) | PB14 | PB6 (TIM4_CH1) | PB7 (TIM4_CH2) |
-| 4 – RR (sau-phải) | PA11 (TIM1_CH4) | PB15 | PB8 (EXTI8) | PB9 (GPIO input) |
+| 1 – FL (trước-trái) | PA8 (TIM1_CH1) | PA6 (TIM3_CH1) | PA0 (TIM2_CH1) | PA1 (TIM2_CH2) |
+| 2 – FR (trước-phải) | PA9 (TIM1_CH2) | PA7 (TIM3_CH2) | PB10 (EXTI10) | PB11 (GPIO input) |
+| 3 – RL (sau-trái) | PA10 (TIM1_CH3) | PB0 (TIM3_CH3) | PB6 (TIM4_CH1) | PB7 (TIM4_CH2) |
+| 4 – RR (sau-phải) | PA11 (TIM1_CH4) | PB1 (TIM3_CH4) | PB8 (EXTI8) | PB9 (GPIO input) |
 
-> **Cảnh báo tương thích BTS7960:** module BTS7960 dùng **RPWM + LPWM** (2 kênh PWM mỗi bánh), không phải PWM + DIR. Nếu đấu DIR vào LPWM, khi lùi cả RPWM và LPWM cùng mức cao sẽ là phanh, không đảo chiều. Chỉ dùng sơ đồ trên với driver có ngõ vào PWM + DIR. Với BTS7960, cần đổi firmware sang 8 PWM:
->
-> - RPWM bánh 1–4: PA8, PA9, PA10, PA11 (TIM1_CH1–CH4)
-> - LPWM bánh 1–4: PA6, PA7, PB0, PB1 (TIM3_CH1–CH4)
->
-> nhưng khi đó TIM3 không còn dùng cho encoder bánh 2 và PB0 đang là E-STOP phải chuyển sang chân khác.
+> **Tương thích BTS7960:** firmware đã phù hợp 100% với module BTS7960 RPWM/LPWM — không cần đổi firmware. Chỉ cần đảm bảo module được cấp VCC 5 V và EN = 5 V (nếu có switch EN).
 
 Lưu ý mức logic:
 
-- Nếu module driver dùng buffer **74HC244** ở 5 V, mức cao 3,3 V có thể không đạt VIH ⇒ dùng **74HCT244** hoặc **TXS0108E** (8 kênh, 3,3 V → 5 V) cho 4 PWM + 4 DIR.
+- Nếu module driver dùng buffer **74HC244** ở 5 V, mức cao 3,3 V có thể không đạt VIH ⇒ dùng **74HCT244** hoặc **TXS0108E** (8 kênh, 3,3 V → 5 V) cho 8 kênh RPWM/LPWM.
 - Nếu đầu vào driver (VIH ≈ 2 V) nhận trực tiếp 3,3 V thì không cần level shifter; kiểm tra datasheet/module thực tế.
-- **Không** nối 12 V vào VCC/PWM/DIR.
+- **Không** nối 12 V vào VCC/RPWM/LPWM/EN.
 - Đặt tụ **1000 µF/25 V** gần thanh phân phối 12 V hoặc 470 µF mỗi module để giảm sụt áp khi đảo chiều.
 
 ### 4.3 Bus 5 V
@@ -240,7 +235,7 @@ Dòng qua cầu chia ≈ 5 / 30 kΩ ≈ 0,167 mA
 - Dùng cặp dây xoắn A/B, tránh song song sát dây động cơ.
 - Nếu encoder là open-collector, bật pull-up nội trong firmware (đã bật `GPIO_PULLUP`) hoặc thêm 10 kΩ lên 3,3 V sau cầu chia.
 - Nếu RPM hiển thị âm khi bánh tiến: đặt `ENCx_INVERT 1` trong `firmware/include/board.h`.
-- Bánh 1–3 dùng encoder mode phần cứng TIM2/TIM3/TIM4 nên đếm x4 (**1320 CPR**). Bánh 4 (RR) chỉ có EXTI trên kênh A (PB8), kênh B (PB9) đọc thụ động ⇒ **thực tế đếm x2**; firmware dùng **ENCODER4_CPR = 660** nên RPM vẫn báo đúng, nhưng độ phân giải chỉ bằng một nửa. Muốn x4 đầy đủ, cần cấu hình thêm EXTI cho PB9 hoặc dùng timer encoder trước khi dùng odometry.
+- Bánh 1 & 3 dùng encoder mode phần cứng TIM2/TIM4 nên đếm x4 (**1320 CPR**). Bánh 2 & 4 giải mã mềm chỉ ngắt cạnh A ⇒ **thực tế đếm x2**; firmware dùng **ENCODER4_CPR = 660** nên RPM vẫn báo đúng, nhưng độ phân giải chỉ bằng một nửa. Muốn x4 đầy đủ, cần thêm EXTI cho PB11/PB9 hoặc dùng timer encoder.
 
 ### 4.6 ST-Link V2
 
@@ -275,21 +270,21 @@ Dùng CP2102/CH340 ở mức logic 3,3 V. Không nối 5 V TTL vào PA2/PA3.
 | PA1 | TIM2_CH2 | Encoder #1 kênh B (TIM2 encoder) |
 | PA2 | USART2_TX | RX của ESP8266 hoặc USB-UART (3,3 V) |
 | PA3 | USART2_RX | TX của ESP8266 hoặc USB-UART (3,3 V) |
-| PA6 | TIM3_CH1 | Encoder #2 kênh A (TIM3 encoder) |
-| PA7 | TIM3_CH2 | Encoder #2 kênh B (TIM3 encoder) |
-| PA8 | TIM1_CH1 | PWM driver #1 |
-| PA9 | TIM1_CH2 | PWM driver #2 |
-| PA10 | TIM1_CH3 | PWM driver #3 |
-| PA11 | TIM1_CH4 | PWM driver #4 |
-| PB0 | EXTI0 | E-STOP (cạnh xuống, pull-up) |
+| PA6 | TIM3_CH1 | LPWM driver #1 |
+| PA7 | TIM3_CH2 | LPWM driver #2 |
+| PA8 | TIM1_CH1 | RPWM driver #1 |
+| PA9 | TIM1_CH2 | RPWM driver #2 |
+| PA10 | TIM1_CH3 | RPWM driver #3 |
+| PA11 | TIM1_CH4 | RPWM driver #4 |
+| PB0 | TIM3_CH3 | LPWM driver #3 |
+| PB1 | TIM3_CH4 | LPWM driver #4 |
 | PB6 | TIM4_CH1 | Encoder #3 kênh A (TIM4 encoder) |
 | PB7 | TIM4_CH2 | Encoder #3 kênh B (TIM4 encoder) |
 | PB8 | EXTI8 | Encoder #4 kênh A (giải mã mềm) |
 | PB9 | GPIO input | Encoder #4 kênh B (đọc thụ động) |
-| PB12 | GPIO output | DIR driver #1 |
-| PB13 | GPIO output | DIR driver #2 |
-| PB14 | GPIO output | DIR driver #3 |
-| PB15 | GPIO output | DIR driver #4 |
+| PB10 | EXTI10 | Encoder #2 kênh A (giải mã mềm) |
+| PB11 | GPIO input | Encoder #2 kênh B (đọc thụ động) |
+| PC0 | EXTI0 | E-STOP (cạnh xuống, pull-up) |
 | PC13 | LED onboard | Active low |
 | PA13 | SWDIO | ST-Link |
 | PA14 | SWCLK | ST-Link |
@@ -297,30 +292,31 @@ Dùng CP2102/CH340 ở mức logic 3,3 V. Không nối 5 V TTL vào PA2/PA3.
 | 5V | Nguồn vào Blue Pill | Bus 5 V |
 | GND | Ground | Điểm sao GND |
 
-Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**. Chân PB1, PB10, PB11 không dùng trong firmware hiện tại.
+Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**.
 
 ### 4.9 Timer và tần số PWM
 
 - HCLK = 72 MHz; TIM1, TIM2, TIM3, TIM4 đều nhận clock 72 MHz.
 - PWM: Prescaler = 0, ARR = 3599 ⇒ `72 MHz / 3600 = 20 kHz`.
-- TIM1 CH1–CH4 (PA8–PA11) → PWM bánh 1–4.
-- TIM2/TIM3/TIM4 ở encoder mode TI12 → encoder bánh 1–3.
-- TIM3 **không còn** dùng để phát LPWM; xung LPWM của thiết kế cũ không còn trong firmware hiện tại.
+- TIM1 CH1–CH4 (PA8–PA11) → RPWM bánh 1–4.
+- TIM3 CH1–CH4 (PA6, PA7, PB0, PB1) → LPWM bánh 1–4.
+- TIM2/TIM4 ở encoder mode TI12 → encoder bánh 1 & 3 (x4).
+- Encoder bánh 2 & 4 giải mã mềm qua EXTI10 (PB10) / EXTI8 (PB8), kênh B đọc thụ động.
 - USART2 (PA2/PA3) @ 115200 8N1.
 
-### 4.10 E-STOP → PB0
+### 4.10 E-STOP → PC0
 
 | Tín hiệu | Nối |
 |---|---|
-| Tiếp điểm E-STOP | PB0 (EXTI0) và GND |
+| Tiếp điểm E-STOP | PC0 (EXTI0) và GND |
 | Chiều kích hoạt | Cạnh xuống (đóng về GND) |
 | Pull | Pull-up nội trong STM32 |
 
 - Khi E-STOP mở/đóng về GND, firmware vào `control_emergency_stop()`: dừng PWM ngay và chốt cờ dừng.
-- Ở boot: nếu pin PB0 đang LOW (nút E-STOP đang giữ), `main.c` gọi `control_emergency_stop()` ngay sau khi khởi tạo → firmware chốt dừng trước khi chạy.
+- Ở boot: nếu pin PC0 đang LOW (nút E-STOP đang giữ), `main.c` gọi `control_emergency_stop()` ngay sau khi khởi tạo → firmware chốt dừng trước khi chạy.
 - Cờ dừng không có lệnh UART để clear; chỉ được xóa khi khởi động lại firmware (nhấn nút reset MCU hoặc cắt nguồn hoàn toàn).
-- Nên dùng E-STOP **hai lớp**: tiếp điểm công suất cắt 12 V động cơ + tiếp điểm tín hiệu về PB0.
-- Không đưa điện áp 12 V/5 V trực tiếp vào PB0; chỉ dùng tiếp điểm khô nối GND.
+- Nên dùng E-STOP **hai lớp**: tiếp điểm công suất cắt 12 V động cơ + tiếp điểm tín hiệu về PC0.
+- Không đưa điện áp 12 V/5 V trực tiếp vào PC0; chỉ dùng tiếp điểm khô nối GND.
 
 ## 5. Kế hoạch connector
 
@@ -374,9 +370,9 @@ Luôn dán nhãn hai đầu dây; không chỉ dựa vào màu.
 - [ ] Điện áp ra cầu chia encoder ≤ 3,3 V ở cả hai mức.
 - [ ] Không cấp đồng thời VIN 5 V và 3V3 cho NodeMCU.
 - [ ] ST-Link không nối 5 V; động cơ OFF khi nạp.
-- [ ] Driver đúng loại PWM+DIR (hoặc đã đổi firmware sang RPWM/LPWM nếu dùng BTS7960).
-- [ ] E-STOP nối PB0–GND hoạt động, firmware dừng và chốt.
-- [ ] Encoder bánh 4 nối đúng PB8/PB9; hiểu rằng firmware chỉ đếm x2.
+- [ ] BTS7960: RPWM/LPWM đã nối đúng (hardware firmware 8 PWM); GND chung; không cấp 12 V vào chân logic.
+- [ ] E-STOP nối PC0–GND hoạt động, firmware dừng và chốt.
+- [ ] Encoder bánh 2 & 4 nối đúng PB10/PB11 và PB8/PB9; hiểu rằng firmware chỉ đếm x2.
 - [ ] Lần đầu cấp nguồn nên dùng nguồn bench có giới hạn dòng.
 - [ ] Kiểm tra chiều quay từng bánh trước khi đặt robot xuống đất.
 
@@ -388,7 +384,7 @@ Các mục dưới đây **chưa có trong BOM hiện tại** nhưng cần cho h
 |---|---|---|---|
 | Cầu chì + đế | 15 A ATO slow-blow | 1 | bắt buộc |
 | Nút dừng khẩn cấp | DC ≥ 20 A | 1 | bắt buộc |
-| Level shifter | 74HCT244 hoặc TXS0108E (8 kênh) | 1 | nếu driver cần logic 5 V cho 4 PWM + 4 DIR |
+| Level shifter | 74HCT244 hoặc TXS0108E (8 kênh) | 1 | nếu driver cần logic 5 V cho 8 kênh RPWM/LPWM |
 | Tụ 12 V | 1000 µF/25 V | 1–4 | gần driver cầu H |
 | Tụ 5 V | 470 µF/16 V + 100 nF | 1 bộ | đầu vào/ra LM2596 |
 | Tụ 3,3 V | 470 µF/10 V + 100 nF | 1 bộ | sát NodeMCU/ESP8266 |
