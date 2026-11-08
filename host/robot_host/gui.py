@@ -780,6 +780,14 @@ class RobotGUI(object):
         """Bind phím tắt (W/A/S/D/Q/E/Space)"""
         self.root.bind("<KeyPress>", self._on_key_press)
         self.root.bind("<KeyRelease>", self._on_key_release)
+        self.root.bind("<FocusOut>", self._on_focus_out)
+        self.root.bind("<Unmap>", self._on_focus_out)
+
+    def _on_focus_out(self, _event):
+        """Cửa sổ mất focus/bị ẩn: xóa mọi hướng đang giữ để robot không chạy mãi."""
+        if self.directions:
+            self.directions.clear()
+            self._recompute()
 
     def _on_key_press(self, event):
         """Xử lý phím nhấn: space = E-STOP, W/A/S/D/Q/E = chuyển động"""

@@ -3,8 +3,8 @@
 
 /* ============================================================
  * ENCODER.H – API CHO 4 ENCODER JGB37-520
- * - Encoder 1–3: TIM2/3/4 encoder mode (phần cứng)
- * - Encoder 4:   EXTI8 + software quadrature decode
+ * - Encoder 1 & 3: TIM2/TIM4 encoder mode (phần cứng, x4)
+ * - Encoder 2 & 4: EXTI10/EXTI8 + software quadrature decode (x2)
  * ============================================================ */
 
 /* Khai báo extern các timer handle từ main.c */
@@ -33,7 +33,7 @@ static uint8_t read_state(Encoder *enc)
 
 /* Khởi tạo encoder:
  * - id: mã encoder (1..4)
- * - timer: con trỏ TIM (NULL cho encoder phần mềm M4)
+ * - timer: con trỏ TIM (NULL cho encoder phần mềm (bánh 2 & 4))
  * - port/pin_a, port/pin_b: chân A/B của encoder
  * - invert: đảo chiều đếm (0 = bình thường, 1 = đảo)
  * Nếu timer != NULL, bật TIM encoder mode và reset counter. */
@@ -62,7 +62,7 @@ void encoder_init(Encoder *enc, EncoderId id,
 
 /* Lấy delta (số xung thay đổi) của encoder:
  * - Timer phần cứng: đọc __HAL_TIM_GET_COUNTER và xử lý tràn 16-bit.
- * - Encoder phần mềm M4: đọc enc->sw_count (không reset ở đây để tránh lỗi RPM).
+ * - Encoder phần mềm (bánh 2 & 4): đọc enc->sw_count (không reset ở đây để tránh lỗi RPM).
  * Trả về delta đã áp dụng invert nếu cần. */
 int32_t encoder_take_delta(Encoder *enc)
 {
@@ -104,7 +104,7 @@ float encoder_get_rpm(Encoder *enc, int32_t delta, float cpr, float dt_sec)
     return ((float)delta / cpr / dt_sec) * 60.0f;
 }
 
-/* Xử lý cạnh encoder cho encoder phần mềm (M4):
+/* Xử lý cạnh encoder cho encoder phần mềm (bánh 2 & 4):
  * - Nếu timer != NULL: bỏ qua (encoder phần cứng xử lý).
  * - Nếu timer == NULL: đọc trạng thái A/B, dùng bảng quadrature để tính delta
  *   và cộng vào enc->sw_count. */

@@ -2,7 +2,7 @@
  * ESP8266 BRIDGE – CẦU NỐI TCP ↔ UART CHO ROBOT MECANUM
  *
  * Chức năng:
- * - Phát WiFi AP "MecanumRobot" (pass: 12345678)
+ * - Kết nối WiFi STA (SSID/mật khẩu trong secrets.h, xem secrets.example.h)
  * - Lắng nghe TCP port 8080
  * - Chuyển byte TCP → UART2 (TX/RX với STM32)
  * - Chuyển byte UART2 → TCP (telemetry)
@@ -16,12 +16,11 @@
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include "secrets.h"
 
 /* ============================================================
  * CẤU HÌNH
  * ============================================================ */
-#define WIFI_SSID       "MecanumRobot"
-#define WIFI_PASSWORD   "12345678"
 #define TCP_PORT        8080
 
 /* UART2 của ESP8266: GPIO13 (RX), GPIO15 (TX) – kết nối STM32 */
@@ -53,16 +52,20 @@ void setup() {
     Serial1.begin(DEBUG_BAUD, SERIAL_8N1, SERIAL_FULL, STM32_TX_PIN);
     Serial.println(F("[UART] UART2 @ 115200 (GPIO13/GPIO15)"));
 
-    /* --- WiFi AP mode --- */
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD, 6);  // Kênh 6 (ít nhiễu hơn kênh 1)
-    IPAddress ip = WiFi.softAPIP();
-    Serial.print(F("[WiFi] AP SSID: "));
+    /* --- WiFi STA mode (kết nối Hotspot điện thoại) --- */
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print(F("[WiFi] Dang ket noi "));
     Serial.println(WIFI_SSID);
-    Serial.print(F("[WiFi] Password: "));
-    Serial.println(WIFI_PASSWORD);
-    Serial.print(F("[WiFi] IP: "));
-    Serial.println(ip);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(F("."));
+    }
+    Serial.println();
+    Serial.print(F("[WiFi] SSID: "));
+    Serial.println(WIFI_SSID);
+    Serial.print(F("[WiFi] IP cua ESP8266: "));
+    Serial.println(WiFi.localIP());
 
     /* --- TCP server --- */
     server.begin();

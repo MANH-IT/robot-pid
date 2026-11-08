@@ -150,7 +150,7 @@ Chi tiết: [docs/uart_protocol.md](docs/uart_protocol.md).
 | Khối | Linh kiện |
 |---|---|
 | Động cơ | 4 × JGB37-520 12 V, 333 RPM, hộp giảm tốc 1:30 |
-| Encoder | Hall 2 kênh A/B: 11 PPR × hộp giảm tốc 1:30 × 4 = **1320 CPR** (bánh 1–3); bánh 4 thuộc x2 (**ENCODER4_CPR = 660**) — RPM báo đúng, độ phân giải chỉ x2 — xem [docs/architecture.md](docs/architecture.md) |
+| Encoder | Hall 2 kênh A/B: 11 PPR × hộp giảm tốc 1:30 × 4 = **1320 CPR** (bánh 1 & 3, encoder phần cứng TIM2/TIM4); bánh 2 & 4 giải mã mềm x2 (**ENCODER4_CPR = 660**) — RPM báo đúng, độ phân giải chỉ x2 — xem [docs/architecture.md](docs/architecture.md) |
 | Bánh | Mecanum đường kính 80 mm, R = 0.04 m |
 | Driver | 4 × **BTS7960** (IBT-2); firmware xuất **RPWM + LPWM** trực tiếp — tương thích, xem [docs/pinout.md](docs/pinout.md) |
 | MCU | STM32F103C8T6 Blue Pill |

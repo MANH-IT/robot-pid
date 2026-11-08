@@ -17,7 +17,7 @@
                                │ UART2 115200 8N1
                                │ TX/RX dạng text, newline
 ┌──────────────────────────────┴─────────────────────────────┐
-│ CẤP THẤP: STM32F103C8T6 @ 72 MHz                           │
+│ CẤP THẤP: STM32F103C8T6 @ 64 MHz (HSI)                           │
 │  - TIM2/TIM4 encoder mode cho bánh 1 & 3 (x4)               │
 │  - EXTI10/EXTI8 + giải mã mềm cho bánh 2 & 4 (x2)           │
 │  - Đo RPM mỗi 10 ms                                         │
@@ -72,10 +72,10 @@ Nếu lắp bánh khiến chiều đi ngang bị đảo, đặt `vy_inverted=Tru
 
 ## 4. Đo tốc độ
 
-- Encoder: JGB37-520 Hall 2 kênh A/B. Mỗi vòng motor có 11 PPR; sau hộp giảm tốc 1:30 và giải mã x4: `11 × 30 × 4 = 1320 CPR` (bánh 1–3).
-- Bánh 4 hiện chỉ giải mã x2 nên CPR hiệu dụng là `11 × 30 × 2 = 660` (`ENCODER4_CPR`); xem bảng bên dưới.
+- Encoder: JGB37-520 Hall 2 kênh A/B. Mỗi vòng motor có 11 PPR; sau hộp giảm tốc 1:30 và giải mã x4: `11 × 30 × 4 = 1320 CPR` (bánh 1 & 3).
+- Bánh 2 & 4 chỉ giải mã x2 nên CPR hiệu dụng là `11 × 30 × 2 = 660` (`ENCODER4_CPR`); xem bảng bên dưới.
 - Chu kỳ đo `dt = 10 ms`.
-- `RPM = Δcount · 60 / (CPR · dt)`, với `CPR = 1320` cho bánh 1–3 và `660` cho bánh 4.
+- `RPM = Δcount · 60 / (CPR · dt)`, với `CPR = 1320` cho bánh 1 & 3 và `660` cho bánh 2 & 4.
 
 Cách đọc trong firmware hiện tại:
 
@@ -105,7 +105,7 @@ Thông số mặc định trong `robot_config.h` chỉ để khởi động: `Kp
 
 ## 6. PWM và driver
 
-- Timer clock 72 MHz, `ARR = 3599`, prescaler 0 → PWM 20 kHz.
+- Timer clock 64 MHz, `ARR = 3199`, prescaler 0 → PWM 20 kHz.
 - **BTS7960 (IBT-2):** mỗi bánh cần 2 kênh PWM riêng (RPWM và LPWM). Firmware hiện tại xuất **8 kênh**:
   - RPWM bánh 1–4: PA8, PA9, PA10, PA11 (TIM1_CH1–CH4)
   - LPWM bánh 1–4: PA6, PA7, PB0, PB1 (TIM3_CH1–CH4)
@@ -140,7 +140,6 @@ y += (vx·sinθ + vy·cosθ)·dt
 
 ## 9. Giới hạn và hướng phát triển
 
-- Bánh 4 chỉ giải mã x2 (xem mục 4); RPM đã báo đúng (CPR riêng 660) nhưng độ phân giải/nhiễu kém hơn — muốn x4 cần EXTI kênh B hoặc timer.
 - Encoder bánh 2 & 4 chỉ giải mã x2 (xem mục 4); RPM đã đúng (CPR 660) nhưng độ phân giải/nhiễu kém hơn.
 - E-STOP chốt tới khi khởi động lại firmware (reset MCU hoặc cắt nguồn); chưa có lệnh clear từ host.
 - Chưa có IMU; odometry sẽ trôi khi bánh trượt.

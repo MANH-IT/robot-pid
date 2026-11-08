@@ -31,7 +31,7 @@ Với bánh đã kê:
 4. Lặp lại cho bánh 2, 3, 4.
 5. Kiểm tra đúng bánh nào là FL/FR/RL/RR. Nếu sai, đổi dây motor/encoder tương ứng, không đổi công thức động học.
 
-> **Lưu ý bánh 4 (RR):** firmware chỉ ngắt cạnh A của encoder 4 (PB8) và đọc B thụ động (PB9), nên đếm **x2** thay vì x4. Từ bản cập nhật gần đây, firmware dùng CPR riêng `ENCODER4_CPR = 660` cho bánh 4 nên RPM báo **đúng**, nhưng độ phân giải chỉ bằng một nửa. Trước khi hiệu chuẩn odometry, lưu ý độ nhiễu cao hơn của bánh 4; muốn x4 đầy đủ cần thêm EXTI cho PB9 hoặc dùng timer encoder.
+> **Lưu ý bánh 2 (FR) & 4 (RR):** firmware chỉ ngắt cạnh A của encoder 2 (PB10) / encoder 4 (PB8) và đọc B thụ động (PB11 / PB9), nên đếm **x2** thay vì x4. Firmware dùng CPR riêng `ENCODER4_CPR = 660` cho cả hai bánh nên RPM báo **đúng**, nhưng độ phân giải chỉ bằng một nửa. Trước khi hiệu chuẩn odometry, lưu ý độ nhiễu cao hơn của bánh 2 & 4; muốn x4 đầy đủ cần thêm EXTI cho PB11/PB9 hoặc dùng timer encoder.
 
 Kiểm tra nhanh bằng lệnh:
 
@@ -205,5 +205,5 @@ Nếu không dừng, kiểm tra:
 - [ ] Timeout 500 ms hoạt động.
 - [ ] E-STOP vật lý hoạt động (cắt 12 V và/hoặc ngõ PC0 chốt dừng).
 - [ ] Driver BTS7960 tương thích trực tiếp với firmware (8 PWM RPWM/LPWM).
-- [ ] Encoder bánh 4 dùng CPR riêng 660 (RPM báo đúng; chấp nhận độ phân giải x2 hoặc đã nâng cấp lên x4).
+- [ ] Encoder bánh 2 & 4 dùng CPR riêng 660 (RPM báo đúng; chấp nhận độ phân giải x2 hoặc đã nâng cấp lên x4).
 - [ ] Vùng chạy không có vật cản ngoài kịch bản test.

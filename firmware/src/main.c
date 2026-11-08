@@ -3,6 +3,7 @@
 #include "board.h"
 #include "control.h"
 #include "encoder.h"
+#include "motor.h"
 #include "protocol.h"
 #include "robot_config.h"
 
@@ -11,16 +12,19 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+IWDG_HandleTypeDef hiwdg;
 
 static uint8_t rx_byte;
 
 static void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_EXTI_NVIC_Init(void);
 static void MX_TIM1_PWM_Init(void);
 static void MX_TIM2_Encoder_Init(void);
 static void MX_TIM3_PWM_Init(void);
 static void MX_TIM4_Encoder_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_IWDG_Init(void);
 static void Error_Handler(void);
 
 int main(void)
@@ -40,12 +44,17 @@ int main(void)
     MX_TIM4_Encoder_Init();
     MX_USART2_UART_Init();
 
+    /* Khởi tạo xong state trước, rồi mới bật ngắt EXTI:
+     * tránh ISR chạy khi htim/protocol/control chưa sẵn sàng. */
     control_init();
-    /* Nếu nút E-STOP đang giữ (LOW) tại thời điểm boot, chốt dừng ngay */
+    protocol_init();
+    MX_EXTI_NVIC_Init();
+    /* Sau khi NVIC đã bật: poll bắt nút E-STOP đang giữ (LOW) từ boot;
+     * cạnh xuống sau thời điểm này do ISR bắt. Chốt dừng nếu cần. */
     if (HAL_GPIO_ReadPin(ESTOP_PORT, ESTOP_PIN) == GPIO_PIN_RESET) {
         control_emergency_stop();
     }
-    protocol_init();
+    MX_IWDG_Init();
 
     HAL_UART_Receive_IT(&huart2, &rx_byte, 1u);
 
@@ -54,6 +63,7 @@ int main(void)
     while (1) {
         uint32_t now;
         protocol_process();
+        HAL_IWDG_Refresh(&hiwdg);
         now = HAL_GetTick();
 
         if ((uint32_t)(now - last_control) >= ROBOT_CONTROL_PERIOD_MS) {
@@ -83,12 +93,16 @@ static void SystemClock_Config(void)
     RCC_OscInitTypeDef osc = {0};
     RCC_ClkInitTypeDef clocks = {0};
 
-    osc.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-    osc.HSEState = RCC_HSE_ON;
-    osc.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+    /* HSI 8 MHz / 2 = 4 MHz -> PLL ×16 = 64 MHz (tối đa của F1 với HSI).
+     * Không phụ thuộc thạch anh ngoài: nhiều Blue Pill clone dùng thạch anh
+     * 12 MHz hoặc không có thạch anh, khiến giả định HSE = 8 MHz sai và
+     * UART baud lệch hoàn toàn. Sai số HSI ~±1%, đủ cho UART 115200. */
+    osc.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    osc.HSIState = RCC_HSI_ON;
+    osc.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
     osc.PLL.PLLState = RCC_PLL_ON;
-    osc.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-    osc.PLL.PLLMUL = RCC_PLL_MUL9;
+    osc.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
+    osc.PLL.PLLMUL = RCC_PLL_MUL16;
     if (HAL_RCC_OscConfig(&osc) != HAL_OK) Error_Handler();
 
     clocks.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
@@ -263,12 +277,28 @@ static void MX_GPIO_Init(void)
     init.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(ESTOP_PORT, &init);
 
+    /* NVIC cho EXTI bật sau trong MX_EXTI_NVIC_Init() */
+}
+
+static void MX_EXTI_NVIC_Init(void)
+{
     HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1u, 0u);
     HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
     HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1u, 0u);
     HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
     HAL_NVIC_SetPriority(EXTI0_IRQn, 0u, 0u);
     HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+}
+
+static void MX_IWDG_Init(void)
+{
+    /* IWDG: LSI 40 kHz / 64 = 625 Hz, reload 625 -> timeout ~1 s.
+     * Main loop refresh mỗi vòng (10 ms). Nếu firmware treo, MCU tự reset.
+     * Lưu ý khi debug bằng ST-Link: dừng CPU >1 s sẽ bị IWDG reset. */
+    hiwdg.Instance = IWDG;
+    hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+    hiwdg.Init.Reload = 625u;
+    if (HAL_IWDG_Init(&hiwdg) != HAL_OK) Error_Handler();
 }
 
 void HAL_MspInit(void)
@@ -402,12 +432,14 @@ void EXTI0_IRQHandler(void)
 
 void HardFault_Handler(void)
 {
+    motor_stop_all();
     __disable_irq();
     while (1) {}
 }
 
 static void Error_Handler(void)
 {
+    motor_stop_all();
     __disable_irq();
     while (1) {}
 }

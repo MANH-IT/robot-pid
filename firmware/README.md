@@ -14,7 +14,7 @@ Nếu chưa có PlatformIO:
 pip install platformio
 ```
 
-Board: `bluepill_f103c8`, framework `stm32cube`, clock 72 MHz từ HSE 8 MHz.
+Board: `bluepill_f103c8`, framework `stm32cube`, clock 64 MHz từ HSI nội (PLL x16/2).
 Upload mặc định dùng ST-Link.
 
 ## Cấu trúc thư mục
@@ -39,7 +39,7 @@ Upload mặc định dùng ST-Link.
 #define ENCODER_CPR 1320.0f   /* bánh 1 & 3, x4 (11×30×4) */
 #define ENCODER4_CPR 660.0f   /* bánh 2 & 4, x2 (11×30×2) */
 #define MAX_WHEEL_RPM 333.0f
-#define PWM_TIM_ARR 3599u     /* 72 MHz / 20 kHz - 1 */
+#define PWM_TIM_ARR 3199u     /* 64 MHz / 20 kHz - 1 */
 #define ROBOT_CONTROL_PERIOD_MS 10u
 #define ROBOT_TELEMETRY_PERIOD_MS 20u
 #define ROBOT_UART_TIMEOUT_MS 500u

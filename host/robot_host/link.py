@@ -97,21 +97,43 @@ class RobotLink(object):
             self._telemetry_monotonic = time.monotonic()
             self.odometry.update(telemetry.rpm_actual, telemetry.t_ms)
 
-    def _command_line(self):
+    def _peek_command(self):
+        """Trả về (kind, line) của lệnh kế tiếp mà KHÔNG dequeue.
+
+        Writer gọi _commit_command(kind) sau khi gửi thành công;
+        lệnh stop/ping được ưu tiên hơn các dòng tuning đang xếp hàng."""
         with self._lock:
-            if self._pending_lines:
-                return self._pending_lines.popleft()
             if self._pending_stop:
-                self._pending_stop = False
-                return format_stop()
+                return "stop", format_stop()
             if self._pending_ping:
-                self._pending_ping = False
-                return format_ping()
+                return "ping", format_ping()
+            if self._pending_lines:
+                return "line", self._pending_lines[0]
             if self._mode == "rpm":
-                return format_rpm(self._target_rpm)
+                return "periodic", format_rpm(self._target_rpm)
             if self._mode == "manual":
-                return format_manual(self._manual[0], self._manual[1])
-            return format_velocity(*self._target_velocity)
+                return "periodic", format_manual(self._manual[0], self._manual[1])
+            return "periodic", format_velocity(*self._target_velocity)
+
+    def _command_line(self):
+        """Giữ tương thích: peek + commit ngay (dùng khi chắc chắn gửi được)."""
+        kind, line = self._peek_command()
+        self._commit_command(kind, expected_line=line)
+        return line
+
+    def _commit_command(self, kind, expected_line=None):
+        with self._lock:
+            if kind == "stop":
+                if self._pending_stop:
+                    self._pending_stop = False
+            elif kind == "ping":
+                if self._pending_ping:
+                    self._pending_ping = False
+            elif kind == "line":
+                if self._pending_lines and (
+                    expected_line is None or self._pending_lines[0] == expected_line
+                ):
+                    self._pending_lines.popleft()
 
     def snapshot(self):
         with self._lock:

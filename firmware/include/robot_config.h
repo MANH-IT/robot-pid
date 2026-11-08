@@ -24,12 +24,12 @@
 #define YAW_ARM_M           ((WHEELBASE_M + TRACK_WIDTH_M) * 0.5f)
 
 /* Encoder:
- * - ENCODER_CPR = 1320 (11 PPR × 30 × 4) cho bánh 1–3
- * - ENCODER4_CPR = 660 (x2) cho bánh 4 vì chỉ ngắt cạnh A
+ * - ENCODER_CPR = 1320 (11 PPR × 30 × 4) cho bánh 1 & 3 (encoder phần cứng TIM2/TIM4)
+ * - ENCODER4_CPR = 660 (x2) cho bánh 2 & 4 vì chỉ ngắt cạnh A (giải mã mềm)
  *   (RPM báo đúng, nhưng độ phân giải chỉ bằng một nửa)
  * - MAX_WHEEL_RPM = 333 (JGB37-520 12V) */
-#define ENCODER_CPR         1320.0f  /* counts/vòng trục ra, bánh 1–3 (x4) */
-#define ENCODER4_CPR        660.0f   /* counts/vòng trục ra, bánh 4 (x2) */
+#define ENCODER_CPR         1320.0f  /* counts/vòng trục ra, bánh 1 & 3 (x4) */
+#define ENCODER4_CPR        660.0f   /* counts/vòng trục ra, bánh 2 & 4 (x2) */
 #define MAX_WHEEL_RPM       333.0f   /* JGB37-520 12V */
 
 /* Đảo chiều nếu cần (sau khi test thực tế) */
@@ -37,8 +37,8 @@
 #define OMEGA_INVERTED      0
 
 /* PWM:
- * - ARR = 3599, prescaler = 0 → 72 MHz / 3600 = 20 kHz */
-#define PWM_TIM_ARR         3599u    /* 72 MHz / 20 kHz - 1 */
+ * - ARR = 3199, prescaler = 0 → 64 MHz / 3200 = 20 kHz */
+#define PWM_TIM_ARR         3199u    /* 64 MHz / 20 kHz - 1 */
 #define PWM_FREQUENCY_HZ    20000u
 
 /* PID:
@@ -57,7 +57,7 @@
 #define DEADZONE_DEFAULT    0.08f
 
 /* An toàn:
- * - E-STOP trên PB0 (EXTI0, cạnh xuống, pull-up).
+ * - E-STOP trên PC0 (EXTI0, cạnh xuống, pull-up).
  *   - Ở boot: main.c kiểm tra mức pin; nếu LOW → chốt emergency_flag.
  *   - Cờ emergency_flag chỉ xóa khi khởi động lại firmware. */
 

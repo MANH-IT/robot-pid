@@ -4,7 +4,7 @@
 /* ============================================================
  * STM32F1xx HAL CONFIGURATION
  * - Cấu hình module HAL được bật cho STM32F103
- * - HSE 8 MHz, PLL x9 → 72 MHz
+ * - HSI 8 MHz nội, PLL x16 → 64 MHz (không phụ thuộc thạch anh)
  * - HSI 8 MHz (backup)
  * ============================================================ */
 
@@ -20,6 +20,7 @@ extern "C" {
 #define HAL_PWR_MODULE_ENABLED
 #define HAL_TIM_MODULE_ENABLED
 #define HAL_UART_MODULE_ENABLED
+#define HAL_IWDG_MODULE_ENABLED
 
 #if !defined(HSE_VALUE)
 #define HSE_VALUE 8000000U
@@ -104,6 +105,10 @@ extern "C" {
 #ifdef HAL_TIM_MODULE_ENABLED
 #include "stm32f1xx_hal_tim.h"
 #include "stm32f1xx_hal_tim_ex.h"
+#endif
+
+#ifdef HAL_IWDG_MODULE_ENABLED
+#include "stm32f1xx_hal_iwdg.h"
 #endif
 
 #ifdef HAL_UART_MODULE_ENABLED

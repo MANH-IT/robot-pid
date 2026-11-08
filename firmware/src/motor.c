@@ -62,10 +62,14 @@ void motor_set(uint8_t index, float command)
     }
 }
 
-/* Dừng tất cả motor: RPWM = 0, LPWM = 0 (coast) */
+/* Dừng tất cả motor: RPWM = 0, LPWM = 0 (coast)
+ * An toàn khi gọi rất sớm/HardFault: nếu TIM chưa init thì bỏ qua. */
 void motor_stop_all(void)
 {
     uint8_t i;
+    if (htim1.Instance == NULL || htim3.Instance == NULL) {
+        return;
+    }
     for (i = 0u; i < 4u; i++) {
         __HAL_TIM_SET_COMPARE(&htim1, motors[i].rpwm_channel, 0u);
         __HAL_TIM_SET_COMPARE(&htim3, motors[i].lpwm_channel, 0u);

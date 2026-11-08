@@ -74,7 +74,7 @@ class SerialLink(RobotLink):
         command_period = self.config.command_period_s
         while not self._stop_event.is_set():
             started = time.monotonic()
-            line = self._command_line()
+            kind, line = self._peek_command()
             with self._serial_lock:
                 ser = self._serial
                 if ser is not None:
@@ -82,6 +82,8 @@ class SerialLink(RobotLink):
                         ser.write(line.encode("ascii"))
                     except Exception as exc:
                         self._set_connected(False, str(exc))
+                    else:
+                        self._commit_command(kind, expected_line=line)
             elapsed = time.monotonic() - started
             remaining = command_period - elapsed
             if remaining > 0.0:

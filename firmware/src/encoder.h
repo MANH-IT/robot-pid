@@ -6,8 +6,8 @@
 
 /* ============================================================
  * ENCODER.H – API CHO 4 ENCODER JGB37-520
- * - Encoder 1–3: TIM2/3/4 encoder mode (phần cứng)
- * - Encoder 4:   EXTI8 + software quadrature decode
+ * - Encoder 1 & 3: TIM2/TIM4 encoder mode (phần cứng, x4)
+ * - Encoder 2 & 4: EXTI10/EXTI8 + software quadrature decode (x2)
  * ============================================================ */
 
 typedef enum {

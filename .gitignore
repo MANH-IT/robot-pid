@@ -5,6 +5,8 @@ venv/
 .pytest_cache/
 .ruff_cache/
 firmware/.pio/
+esp8266/.pio/
+esp8266/src/secrets.h
 *.csv
 *.pt
 *.onnx

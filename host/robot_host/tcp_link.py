@@ -79,7 +79,7 @@ class TcpLink(RobotLink):
         command_period = self.config.command_period_s
         while not self._stop_event.is_set():
             started = time.monotonic()
-            line = self._command_line()
+            kind, line = self._peek_command()
             with self._socket_lock:
                 sock = self._socket
                 if sock is not None:
@@ -87,6 +87,12 @@ class TcpLink(RobotLink):
                         sock.sendall(line.encode("ascii"))
                     except Exception as exc:
                         self._set_connected(False, str(exc))
+                        try:
+                            sock.shutdown(socket.SHUT_RDWR)
+                        except Exception:
+                            pass
+                    else:
+                        self._commit_command(kind, expected_line=line)
             elapsed = time.monotonic() - started
             remaining = command_period - elapsed
             if remaining > 0.0:
