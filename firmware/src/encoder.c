@@ -55,7 +55,6 @@ int32_t encoder_take_delta(Encoder *enc)
         uint32_t primask = __get_PRIMASK();
         __disable_irq();
         current_count = enc->sw_count;
-        enc->sw_count = 0;
         if (primask == 0u) {
             __enable_irq();
         }
