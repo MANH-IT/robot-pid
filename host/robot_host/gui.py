@@ -45,6 +45,10 @@ DIRECTION_KEYS = {
 
 
 class RobotGUI(object):
+    """Giao diện Tkinter điều khiển robot Mecanum:
+    - Hiển thị telemetry, odometry, biểu đồ
+    - Điều khiển chuyển động, PWM thủ công, PID online
+    - E-STOP khẩn cấp, log"""
     def __init__(self, link, config, simulated=False):
         self.link = link
         self.config = config
@@ -93,6 +97,7 @@ class RobotGUI(object):
         self.root.after(50, self._tick)
 
     def _build_style(self):
+        """Thiết lập style Tkinter (theme, màu sắc, font)"""
         style = ttk.Style(self.root)
         try:
             style.theme_use("clam")
@@ -145,6 +150,7 @@ class RobotGUI(object):
         )
 
     def _label(self, parent, text, size=10, color=TEXT, bold=False, mono=False, bg=None, **kwargs):
+        """Tạo label Tkinter với font và màu sắc"""
         family = self.mono_family if mono else self.font_family
         weight = "bold" if bold else "normal"
         if bg is None:
@@ -163,6 +169,7 @@ class RobotGUI(object):
 
     def _button(self, parent, text, command=None, kind="neutral", size=10, width=None, height=None,
                 bold=True, padx=12, pady=7, **kwargs):
+        """Tạo button Tkinter với palette màu"""
         palettes = {
             "neutral": (CARD_ALT, "#e7edf3", TEXT),
             "accent": (ACCENT, ACCENT_HOVER, "#ffffff"),
@@ -196,6 +203,7 @@ class RobotGUI(object):
         return button
 
     def _hold_button(self, parent, text, name, kind="neutral", **kwargs):
+        """Tạo button giữ nút (hold) cho điều khiển chuyển động"""
         button = self._button(parent, text, command=None, kind=kind, **kwargs)
         button.bind("<ButtonPress-1>", lambda event, n=name: self._press(n), add="+")
         button.bind("<ButtonRelease-1>", lambda event, n=name: self._release(n), add="+")
@@ -203,6 +211,7 @@ class RobotGUI(object):
         return button
 
     def _card(self, parent, title, subtitle=None):
+        """Tạo khung card với tiêu đề và subtitle"""
         outer = tk.Frame(parent, bg=CARD, highlightbackground=BORDER, highlightthickness=1)
         head = tk.Frame(outer, bg=CARD)
         head.pack(fill="x", padx=14, pady=(10, 0))
@@ -215,6 +224,7 @@ class RobotGUI(object):
         return outer, body
 
     def _build_header(self):
+        """Xây dựng header: logo, status, E-STOP button"""
         header = tk.Frame(self.root, bg=HEADER_BG, height=76)
         header.grid(row=0, column=0, sticky="ew")
         header.grid_propagate(False)
@@ -299,6 +309,7 @@ class RobotGUI(object):
         ).pack(side="right")
 
     def _build_body(self):
+        """Xây dựng body: left (connection, motion, odometry), center (drive, telemetry), right (tabs)"""
         body = tk.Frame(self.root, bg=BG)
         body.grid(row=1, column=0, sticky="nsew", padx=16, pady=14)
         body.grid_rowconfigure(0, weight=1)
@@ -329,6 +340,7 @@ class RobotGUI(object):
         self._build_log_tab(log_tab)
 
     def _build_connection_card(self, parent):
+        """Xây dựng card kết nối (kênh, địa chỉ, chi tiết)"""
         card, body = self._card(parent, "KẾT NỐI", "UART")
         card.pack(fill="x", pady=(0, 10))
         rows = (
@@ -342,6 +354,7 @@ class RobotGUI(object):
         body.grid_columnconfigure(1, weight=1)
 
     def _build_motion_card(self, parent):
+        """Xây dựng card chuyển động (tốc độ, xoay, phím tắt)"""
         card, body = self._card(parent, "CHUYỂN ĐỘNG", "m/s · rad/s")
         card.pack(fill="x", pady=(0, 10))
 
@@ -420,6 +433,7 @@ class RobotGUI(object):
         )
 
     def _build_odometry_card(self, parent):
+        """Xây dựng card odometry (vị trí, quãng đường, reset)"""
         card, body = self._card(parent, "ODOMETRY", "vị trí")
         card.pack(fill="x")
         self.pose_var = tk.StringVar(value="x 0.000 m   y 0.000 m   θ 0.0°")
@@ -440,6 +454,7 @@ class RobotGUI(object):
         ).pack(anchor="w", pady=(10, 0))
 
     def _build_drive_card(self, parent):
+        """Xây dựng card lái xe (nút bấm điều khiển)"""
         card, body = self._card(parent, "LÁI XE", "giữ nút để chạy")
         card.pack(fill="x", pady=(0, 12))
 
@@ -515,6 +530,7 @@ class RobotGUI(object):
         ).pack(anchor="w", pady=(3, 0))
 
     def _build_telemetry_card(self, parent):
+        """Xây dựng card telemetry (RPM, setpoint, biểu đồ)"""
         card, body = self._card(parent, "TELEMETRY", "RPM thực tế / đặt")
         card.pack(fill="both", expand=True)
 
@@ -567,6 +583,7 @@ class RobotGUI(object):
         self.chart.pack(fill="both", expand=True)
 
     def _build_calibration_tab(self, parent):
+        """Xây dựng tab hiệu chuẩn (PID, dead-zone, PWM thủ công)"""
         rpm_card, rpm_body = self._card(parent, "RPM TRỰC TIẾP", "4 bánh")
         rpm_card.pack(fill="x", pady=(0, 10))
         for index in range(4):
@@ -708,6 +725,7 @@ class RobotGUI(object):
         ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
     def _build_log_tab(self, parent):
+        """Xây dựng tab nhật ký (log)"""
         toolbar = tk.Frame(parent, bg=BG)
         toolbar.pack(fill="x", pady=(0, 8))
         self._label(toolbar, "SỰ KIỆN", size=9, bold=True, bg=BG).pack(side="left")
@@ -743,6 +761,7 @@ class RobotGUI(object):
         self._log("Giao diện sẵn sàng")
 
     def _build_footer(self):
+        """Xây dựng footer (tần số lệnh, kết nối)"""
         footer = tk.Frame(self.root, bg=BG)
         footer.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 10))
         self._label(
@@ -756,10 +775,12 @@ class RobotGUI(object):
         self._label(footer, "", size=8, color=MUTED, bg=BG, textvariable=self.footer_var).pack(side="right")
 
     def _bind_keys(self):
+        """Bind phím tắt (W/A/S/D/Q/E/Space)"""
         self.root.bind("<KeyPress>", self._on_key_press)
         self.root.bind("<KeyRelease>", self._on_key_release)
 
     def _on_key_press(self, event):
+        """Xử lý phím nhấn: space = E-STOP, W/A/S/D/Q/E = chuyển động"""
         if isinstance(event.widget, (tk.Entry, ttk.Entry, ttk.Spinbox, tk.Text, tk.Scale)):
             return
         if event.keysym == "space":
@@ -771,24 +792,29 @@ class RobotGUI(object):
             self._recompute()
 
     def _on_key_release(self, event):
+        """Xử lý phím thả: cập nhật directions"""
         direction = DIRECTION_KEYS.get(event.char)
         if direction:
             self.directions.discard(direction)
             self._recompute()
 
     def _press(self, name):
+        """Thêm direction vào set và recompute velocity"""
         self.directions.add(name)
         self._recompute()
 
     def _release(self, name):
+        """Xóa direction khỏi set và recompute velocity"""
         self.directions.discard(name)
         self._recompute()
 
     def _update_motion_labels(self):
+        """Cập nhật label tốc độ và xoay"""
         self.speed_value_label.configure(text="%.2f m/s" % float(self.speed_var.get()))
         self.turn_value_label.configure(text="%.2f rad/s" % float(self.turn_var.get()))
 
     def _recompute(self):
+        """Tính toán velocity từ directions và scale"""
         if "stop" in self.directions:
             self.directions.clear()
         speed = float(self.speed_var.get())
@@ -814,11 +840,13 @@ class RobotGUI(object):
         self.link.set_velocity(vx * scale, vy * scale, omega)
 
     def _emergency_stop(self):
+        """E-STOP: gửi STOP, clear directions, log warning"""
         self.directions.clear()
         self.link.stop()
         self._log("STOP khẩn cấp đã gửi", "warn")
 
     def _apply_rpm(self):
+        """Áp dụng RPM từ input fields"""
         try:
             rpms = [float(v.get()) for v in self.rpm_vars]
         except (tk.TclError, ValueError):
@@ -828,11 +856,13 @@ class RobotGUI(object):
         self._log("RPM đặt: %.1f, %.1f, %.1f, %.1f" % tuple(rpms))
 
     def _zero_rpm(self):
+        """Đặt tất cả RPM về 0"""
         for variable in self.rpm_vars:
             variable.set(0.0)
         self._apply_rpm()
 
     def _apply_manual(self):
+        """Áp dụng PWM thủ công cho một bánh"""
         try:
             index = int(self.manual_index_var.get())
             duty = float(self.manual_duty_var.get())
@@ -846,11 +876,13 @@ class RobotGUI(object):
         self._log("PWM bánh %d, duty %.3f" % (index, duty), "warn")
 
     def _exit_manual(self):
+        """Thoát PWM thủ công, đặt velocity về 0"""
         self.directions.clear()
         self.link.set_velocity(0.0, 0.0, 0.0)
         self._log("Đã thoát PWM thủ công")
 
     def _apply_pid(self):
+        """Áp dụng PID gains online"""
         try:
             index = int(self.pid_index_var.get())
             kp = float(self.kp_var.get())
@@ -866,6 +898,7 @@ class RobotGUI(object):
         self._log("PID bánh %d: Kp=%.6f Ki=%.6f Kd=%.6f" % (index, kp, ki, kd))
 
     def _apply_deadzone(self):
+        """Áp dụng dead-zone online"""
         try:
             index = int(self.dz_index_var.get())
             value = float(self.dz_value_var.get())
@@ -879,6 +912,7 @@ class RobotGUI(object):
         self._log("Dead-zone bánh %d = %.3f" % (index, value))
 
     def _log(self, message, level="info"):
+        """Ghi log vào text widget"""
         stamp = time.strftime("%H:%M:%S")
         self.log_text.configure(state="normal")
         self.log_text.insert("end", "[%s] " % stamp, "time")
@@ -887,11 +921,13 @@ class RobotGUI(object):
         self.log_text.configure(state="disabled")
 
     def _clear_log(self):
+        """Xóa log"""
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", "end")
         self.log_text.configure(state="disabled")
 
     def _draw_wheel_bar(self, index, actual, setpoint):
+        """Vẽ thanh RPM cho bánh index"""
         canvas = self.wheel_bars[index]
         canvas.delete("all")
         width = max(canvas.winfo_width(), 40)
@@ -917,6 +953,7 @@ class RobotGUI(object):
         canvas.create_line(x_setpoint, 0, x_setpoint, height, fill=YELLOW, width=2)
 
     def _draw_chart(self):
+        """Vẽ biểu đồ RPM theo thời gian"""
         canvas = self.chart
         canvas.delete("all")
         width = max(canvas.winfo_width(), 220)
@@ -978,6 +1015,7 @@ class RobotGUI(object):
                 )
 
     def _tick(self):
+        """Cập nhật GUI mỗi 50 ms: status, telemetry, odometry, chart"""
         snapshot = self.link.snapshot()
         telemetry = snapshot["telemetry"]
         fresh = self.link.telemetry_fresh()
@@ -1062,7 +1100,9 @@ class RobotGUI(object):
         self.root.after(50, self._tick)
 
     def _on_close(self):
+        """Đóng cửa sổ GUI"""
         self.root.destroy()
 
     def run(self):
+        """Chạy mainloop Tkinter"""
         self.root.mainloop()
