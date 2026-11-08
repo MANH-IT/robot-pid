@@ -5,7 +5,7 @@ Thông số trong repo là điểm khởi đầu. Robot chỉ chạy tốt sau k
 ## 0. Chuẩn bị an toàn
 
 1. Kê bánh khỏi mặt bàn hoặc đặt robot trong khu vực trống, không có người.
-2. Có công tắc dừng khẩn cấp cắt nguồn 12 V động cơ.
+2. Có công tắc dừng khẩn cấp cắt nguồn 12 V động cơ; nếu đấu thêm E-STOP về PB0, lưu ý firmware sẽ **chốt dừng tới khi reset nguồn**.
 3. Kiểm tra chiều quay bánh trước khi cho robot chạy trên mặt đất.
 4. Mở GUI:
 
@@ -30,6 +30,8 @@ Với bánh đã kê:
 3. Nếu RPM âm trong khi bánh quay theo chiều tiến, đặt `ENC1_INVERT 1` trong `firmware/include/board.h`.
 4. Lặp lại cho bánh 2, 3, 4.
 5. Kiểm tra đúng bánh nào là FL/FR/RL/RR. Nếu sai, đổi dây motor/encoder tương ứng, không đổi công thức động học.
+
+> **Lưu ý bánh 4 (RR):** firmware hiện chỉ ngắt cạnh A của encoder 4 (PB8) và đọc B thụ động (PB9), nên đếm **x2** thay vì x4. RPM telemetry của bánh 4 sẽ thấp khoảng một nửa so với thực tế. Trước khi hiệu chuẩn odometry, cần sửa firmware (thêm EXTI cho PB9 hoặc dùng timer encoder) hoặc thêm hệ số bù/nhân đôi delta riêng cho bánh 4.
 
 Kiểm tra nhanh bằng lệnh:
 
@@ -201,5 +203,7 @@ Nếu không dừng, kiểm tra:
 - [ ] Đi ngang đúng chiều.
 - [ ] Xoay đúng chiều.
 - [ ] Timeout 500 ms hoạt động.
-- [ ] E-STOP vật lý hoạt động.
-- [ ] Vùng chạy AI không có vật cản ngoài kịch bản test.
+- [ ] E-STOP vật lý hoạt động (cắt 12 V và/hoặc ngõ PB0 chốt dừng).
+- [ ] Driver tương thích firmware PWM+DIR (hoặc đã đổi firmware sang RPWM/LPWM nếu dùng BTS7960).
+- [ ] Encoder bánh 4 đã xử lý vấn đề đếm x2 (sửa firmware hoặc CPR riêng).
+- [ ] Vùng chạy không có vật cản ngoài kịch bản test.

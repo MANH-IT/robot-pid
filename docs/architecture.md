@@ -12,16 +12,18 @@
 └──────────────────────────────┬─────────────────────────────┘
                                │ WiFi TCP (hoặc USB-UART)
 ┌──────────────────────────────┴─────────────────────────────┐
-│ ESP8266 ESP-01S: cầu nối trong suốt TCP ↔ UART              │
+│ ESP8266 NodeMCU V3: cầu nối trong suốt TCP ↔ UART           │
 └──────────────────────────────┬─────────────────────────────┘
                                │ UART2 115200 8N1
                                │ TX/RX dạng text, newline
 ┌──────────────────────────────┴─────────────────────────────┐
 │ CẤP THẤP: STM32F103C8T6 @ 72 MHz                           │
-│  - EXTI giải mã quadrature x4 cho 4 encoder (8 chân)        │
+│  - TIM2/TIM3/TIM4 encoder mode cho bánh 1–3 (x4)            │
+│  - EXTI8 + giải mã mềm cho bánh 4 (thực tế x2)              │
 │  - Đo RPM mỗi 10 ms                                         │
 │  - 4 PID độc lập, anti-windup, derivative-on-measurement   │
-│  - 8 kênh PWM 20 kHz → 4 × BTS7960 (RPWM/LPWM)              │
+│  - TIM1 CH1–CH4 PWM 20 kHz + 4 chân DIR                     │
+│  - E-STOP EXTI0 → chốt dừng khẩn cấp                        │
 │  - Timeout 500 ms → PWM 0, reset PID                        │
 └──────────────────────────────┬─────────────────────────────┘
                                │ 12 V power stage
@@ -30,17 +32,18 @@
 
 Lý do phân tầng: vòng PID cần jitter thấp và phải chạy độc lập với GUI/WiFi. STM32 đảm bảo chu kỳ 10 ms ổn định; laptop có thể bận vẽ đồ thị hoặc mạng WiFi chập chờn mà không làm mất vòng kín. Nếu mất kết nối quá 500 ms, firmware tự dừng động cơ.
 
-ESP8266 chỉ là cầu nối byte trong suốt, không xử lý giao thức. Mọi lệnh vẫn do laptop tạo ra theo [uart_protocol.md](uart_protocol.md).
+ESP8266 chỉ là cầu nối byte trong suốt, không xử lý giao thức. Mọi lệnh vẫn do laptop tạo ra theo [uart_protocol.md](uart_protocol.md). Firmware ESP hiện tại là `esp8266/src/main.cpp` cho NodeMCU V3 (xem [esp8266.md](esp8266.md)).
 
 ## 2. Luồng dữ liệu
 
-1. GUI đặt vận tốc thân `(vx, vy, ω)`.
-2. Host tính động học nghịch → 4 RPM đặt, đóng gói `V,...` hoặc `R,...`, gửi 20 Hz qua USB-UART hoặc TCP tới ESP8266.
+1. GUI đặt vận tốc thân `(vx, vy, ω)` hoặc 4 RPM trực tiếp, hoặc duty PWM thủ công cho một bánh.
+2. Host tính động học nghịch → 4 RPM đặt, đóng gói `V,...` / `R,...` / `M,...`, gửi 20 Hz qua USB-UART hoặc TCP tới ESP8266.
 3. ESP8266 chuyển nguyên văn byte xuống UART2; STM32 nhận UART ngắt từng byte, parser dòng lệnh, cập nhật setpoint.
-4. Mỗi 10 ms: đọc delta encoder, tính RPM thực, chạy 4 PID, xuất PWM.
+4. Mỗi 10 ms: đọc delta encoder, tính RPM thực, chạy 4 PID, xuất PWM + DIR.
 5. Mỗi 20 ms: gửi `T,...` gồm RPM thực và RPM đặt.
 6. Host parse telemetry, cập nhật đồ thị và odometry.
 7. Nếu quá 500 ms không có lệnh hợp lệ, STM32 dừng động cơ.
+8. Nếu có cạnh xuống trên chân E-STOP (PB0), STM32 dừng ngay và **chốt** trạng thái dừng cho tới khi reset nguồn.
 
 ## 3. Động học nghịch Mecanum
 
@@ -69,12 +72,22 @@ Nếu lắp bánh khiến chiều đi ngang bị đảo, đặt `vy_inverted=Tru
 
 ## 4. Đo tốc độ
 
-- Encoder: 1320 xung/vòng trục ra sau giải mã x4.
+- Encoder: JGB37-520 Hall 2 kênh A/B, 1320 xung/vòng trục ra sau giải mã x4.
 - Chu kỳ đo `dt = 10 ms`.
 - `RPM = Δcount · 60 / (1320 · dt)`.
-- Với 333 RPM, Δcount ≈ 73 xung/10 ms → đủ độ phân giải, không tràn biến 32-bit.
 
-Giải mã quadrature dùng bảng 16 trạng thái trong `encoder.c`. Mỗi cạnh A hoặc B đều là ngắt EXTI, tương đương giải mã x4.
+Cách đọc trong firmware hiện tại:
+
+| Bánh | Timer / chân | Chế độ | Hệ số thực tế |
+|---|---|---|---|
+| 1 – FL | TIM2, PA0/PA1 | Encoder phần cứng TI12 | x4 |
+| 2 – FR | TIM3, PA6/PA7 | Encoder phần cứng TI12 | x4 |
+| 3 – RL | TIM4, PB6/PB7 | Encoder phần cứng TI12 | x4 |
+| 4 – RR | EXTI8 PB8, B đọc qua PB9 | Giải mã mềm, **chỉ ngắt cạnh A** | **x2** |
+
+> **Hạn chế đã biết:** bánh 4 chỉ đếm 2 cạnh mỗi chu kỳ encoder (x2) trong khi vẫn dùng chung `ENCODER_CPR = 1320` (giá trị x4). Vì vậy RPM báo cho bánh 4 chỉ bằng khoảng một nửa thực tế. Muốn đúng x4, cần cấu hình thêm EXTI cho kênh B (PB9) hoặc dùng timer khác; nếu giữ nguyên code, phải sửa firmware để dùng CPR riêng (hoặc nhân đôi delta) cho bánh 4.
+
+Timer encoder dùng `TIM_ENCODERMODE_TI12`, bộ lọc `IC1Filter = IC2Filter = 6`.
 
 ## 5. PID
 
@@ -82,7 +95,7 @@ Mỗi bánh có một `PidController`:
 
 - Sai lệch `e = RPM_set - RPM_actual`.
 - `P = Kp·e`.
-- `I` có điều kiện: chỉ tích phân khi đầu ra chưa bão hòa hoặc sai lệch đang kéo đầu ra ra khỏi bão hòa (anti-windup).
+- `I` có điều kiện: chỉ tích phân khi đầu ra chưa bão hòa hoặc sai lệch đang kéo đầu ra ra khỏi bão hòa (anti-windup). `I` bị kẹp trong `[-0.5, 0.5]`.
 - `D` tính trên tốc độ đo: `D = -Kd·d(RPM_actual)/dt`, có lọc thông thấp alpha = 0.30 để giảm nhiễu lượng tử encoder.
 - Bù dead-zone: cộng `Dz` cùng dấu với setpoint khi đầu ra cùng dấu, giúp động cơ vượt ma sát tĩnh.
 - Đầu ra chuẩn hóa `[-1, 1]`, sau đó map sang compare `0..3599` của timer.
@@ -92,13 +105,24 @@ Thông số mặc định chỉ để khởi động. Bắt buộc hiệu chuẩ
 ## 6. PWM và driver
 
 - Timer clock 72 MHz, `ARR = 3599`, prescaler 0 → PWM 20 kHz.
-- TIM1 CH1–CH4: RPWM bánh 1–4.
-- TIM3 CH1–CH4: LPWM bánh 1–4.
-- Tiến: RPWM = duty, LPWM = 0.
-- Lùi: LPWM = duty, RPWM = 0.
-- Dừng: cả hai = 0 (coast). Khi timeout, `motor_stop_all()` đặt cả 8 kênh về 0.
+- TIM1 CH1–CH4 → chân PWM bánh 1–4: PA8, PA9, PA10, PA11.
+- 4 chân DIR → PB12, PB13, PB14, PB15.
+- Tiến: `DIR = 0`, PWM = duty.
+- Lùi: `DIR = 1`, PWM = duty.
+- Dừng/coast: PWM = 0.
+- `motor_brake_all()` hiện không được dùng; với sơ đồ PWM+DIR nó sẽ cho `DIR = 1` + PWM = 100%, tức chạy lùi hết ga chứ không phải phanh.
 
-## 7. Odometry
+> **Cảnh báo tương thích:** firmware hiện xuất **1 PWM + 1 DIR cho mỗi bánh**. Module BTS7960 trong BOM cần **2 kênh PWM riêng (RPWM và LPWM)**. Đấu DIR trực tiếp vào LPWM sẽ không đảo chiều đúng (cả hai đầu vào cùng mức cao → phanh). Nếu dùng BTS7960, phải đổi firmware sang chế độ 8 PWM như thiết kế cũ (khi đó TIM3 không còn cho encoder bánh 2 và phải remap E-STOP khỏi PB0), hoặc dùng driver hỗ trợ PWM+DIR.
+
+## 7. E-STOP
+
+- Ngõ vào PB0 / EXTI0, cạnh xuống, pull-up nội.
+- Ngắt gọi `control_emergency_stop()`: đặt `emergency_flag = 1`, dừng tất cả PWM, reset PID và setpoint.
+- Trong `control_step()`, khi `emergency_flag` bật thì mọi lệnh chuyển động bị bỏ qua và PWM giữ 0.
+- Cờ này **không được xóa trong firmware**; cần reset nguồn/vi điều khiển để chạy lại.
+- Nên dùng E-STOP hai lớp: cắt nguồn động cơ bằng tiếp điểm công suất và đưa tín hiệu về PB0.
+
+## 8. Odometry
 
 Host tích phân vận tốc thân trong hệ tọa độ thế giới:
 
@@ -110,10 +134,13 @@ y += (vx·sinθ + vy·cosθ)·dt
 
 `dt` lấy từ timestamp `t_ms` trong telemetry, không phụ thuộc tốc độ vẽ GUI. Góc θ được chuẩn hóa về `[-π, π]`.
 
-## 8. Giới hạn và hướng phát triển
+## 9. Giới hạn và hướng phát triển
 
-- EXTI x4 có thể bỏ xung nếu A và B đổi đồng thời ở tốc độ rất cao; với 333 RPM và 1320 CPR, khoảng cách cạnh ≈ 136 µs nên an toàn trong thực tế. Có thể chuyển sang timer encoder mode nếu cần.
+- Encoder 4 chỉ giải mã x2 (xem mục 4); cần sửa firmware (thêm EXTI kênh B hoặc dùng timer) trước khi tin odometry.
+- Firmware PWM+DIR chưa tương thích trực tiếp với BTS7960 (xem mục 6).
+- E-STOP chốt vĩnh viễn tới khi reset nguồn; chưa có lệnh clear từ host.
 - Chưa có IMU; odometry sẽ trôi khi bánh trượt.
 - Chưa có PID vị trí/heading; hiện tại là vòng kín tốc độ.
 - WiFi thêm độ trễ và jitter so với USB-UART; timeout 500 ms vẫn bảo vệ robot nhưng nên ưu tiên USB-UART khi hiệu chuẩn PID.
+- Chế độ PWM thủ công chỉ điều khiển một bánh tại một thời điểm; các bánh còn lại dừng.
 - Có thể thêm web app chạy trực tiếp trên ESP8266, lưu PID vào flash, hoặc ROS 2 bridge.

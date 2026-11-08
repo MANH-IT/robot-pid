@@ -6,7 +6,7 @@ Host -> STM32:
     STOP
     PING
     P,<1..4>,<kp>,<ki>,<kd>      chỉnh PID online
-    D,<1..4>,<deadzone>          chỉnh bù dead-zone online (0..1)
+    D,<1..4>,<deadzone>          chỉnh bù dead-zone online (0..0.5)
 
 STM32 -> Host (50 Hz):
     T,<t_ms>,<rpm_act_x10 x4>,<rpm_set_x10 x4>

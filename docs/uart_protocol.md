@@ -19,7 +19,7 @@ Nối chéo TX/RX, nối chung GND. Không nối 5 V của Blue Pill với ESP82
 Host có thể kết nối theo hai cách:
 
 - **USB-UART có dây:** `/dev/ttyUSB0` hoặc `COMx`, dùng trực tiếp giao thức dưới đây.
-- **WiFi qua ESP8266:** ESP-01S làm cầu nối trong suốt TCP ↔ UART. Laptop mở TCP tới ESP và gửi đúng các dòng lệnh; không cần thêm lớp giao thức. Xem [esp8266.md](esp8266.md).
+- **WiFi qua ESP8266:** NodeMCU V3 làm cầu nối trong suốt TCP ↔ UART. Laptop mở TCP tới ESP và gửi đúng các dòng lệnh; không cần thêm lớp giao thức. Xem [esp8266.md](esp8266.md).
 
 ## 2. Host → STM32
 
@@ -160,12 +160,21 @@ Gửi RPM ×10 để tránh printf số thực trên MCU, giảm flash và CPU.
 - Nếu `now - last_valid_rx > 500 ms`, firmware:
   - đặt setpoint 4 bánh = 0,
   - reset PID,
-  - đặt cả 8 kênh PWM = 0,
+  - đặt cả 4 kênh PWM = 0 (chân DIR về 0),
   - tiếp tục gửi telemetry.
 - Host gửi lệnh 20 Hz ngay cả khi robot đứng yên (`V,0,0,0`) để duy trì kết nối.
 - Sau timeout, cần một lệnh hợp lệ mới để chạy lại.
 
 Các dòng lệnh không hợp lệ không được tính là "alive".
+
+## 4.1 E-STOP phần cứng
+
+- Chân PB0 là ngõ vào E-STOP (EXTI0, cạnh xuống, pull-up nội). Tiếp điểm E-STOP nối PB0–GND.
+- Khi kích hoạt, firmware gọi `control_emergency_stop()`: dừng PWM ngay, reset PID, đặt setpoint 0 và bật cờ `emergency_flag`.
+- Cờ này **chốt vĩnh viễn**: mọi lệnh `V`, `R`, `M` sau đó đều bị bỏ qua; `STOP` cũng không xóa cờ.
+- Cách duy nhất để chạy lại là reset nguồn/vi điều khiển.
+- Telemetry vẫn tiếp tục gửi 50 Hz với RPM thực và setpoint 0.
+- Nên dùng E-STOP hai lớp: cắt 12 V động cơ bằng tiếp điểm công suất và đưa tín hiệu về PB0.
 
 ## 5. Ví dụ một phiên
 

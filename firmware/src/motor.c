@@ -1,38 +1,31 @@
 #include "motor.h"
 
 #include "stm32f1xx_hal.h"
+#include "board.h"
 #include "robot_config.h"
 
 extern TIM_HandleTypeDef htim1;
-extern TIM_HandleTypeDef htim3;
 
 typedef struct {
-    TIM_HandleTypeDef *htim;
-    uint32_t channel;
-} PwmChannel;
+    uint32_t pwm_channel;
+    GPIO_TypeDef *dir_port;
+    uint16_t dir_pin;
+} MotorChannel;
 
-static const PwmChannel rpwm[4] = {
-    {&htim1, TIM_CHANNEL_1},
-    {&htim1, TIM_CHANNEL_2},
-    {&htim1, TIM_CHANNEL_3},
-    {&htim1, TIM_CHANNEL_4}
-};
-
-static const PwmChannel lpwm[4] = {
-    {&htim3, TIM_CHANNEL_1},
-    {&htim3, TIM_CHANNEL_2},
-    {&htim3, TIM_CHANNEL_3},
-    {&htim3, TIM_CHANNEL_4}
+static const MotorChannel motors[4] = {
+    { TIM_CHANNEL_1, MOTOR1_DIR_PORT, MOTOR1_DIR_PIN },
+    { TIM_CHANNEL_2, MOTOR2_DIR_PORT, MOTOR2_DIR_PIN },
+    { TIM_CHANNEL_3, MOTOR3_DIR_PORT, MOTOR3_DIR_PIN },
+    { TIM_CHANNEL_4, MOTOR4_DIR_PORT, MOTOR4_DIR_PIN }
 };
 
 void motor_init(void)
 {
-    uint8_t index;
-    for (index = 0u; index < 4u; index++) {
-        HAL_TIM_PWM_Start(rpwm[index].htim, rpwm[index].channel);
-        HAL_TIM_PWM_Start(lpwm[index].htim, lpwm[index].channel);
-        __HAL_TIM_SET_COMPARE(rpwm[index].htim, rpwm[index].channel, 0u);
-        __HAL_TIM_SET_COMPARE(lpwm[index].htim, lpwm[index].channel, 0u);
+    uint8_t i;
+    for (i = 0u; i < 4u; i++) {
+        HAL_TIM_PWM_Start(&htim1, motors[i].pwm_channel);
+        __HAL_TIM_SET_COMPARE(&htim1, motors[i].pwm_channel, 0u);
+        HAL_GPIO_WritePin(motors[i].dir_port, motors[i].dir_pin, GPIO_PIN_RESET);
     }
 }
 
@@ -40,40 +33,37 @@ void motor_set(uint8_t index, float command)
 {
     float magnitude;
     uint32_t compare;
+    GPIO_PinState dir;
 
-    if (index >= 4u) {
-        return;
-    }
+    if (index >= 4u) return;
 
-    if (command > 1.0f) {
-        command = 1.0f;
-    } else if (command < -1.0f) {
-        command = -1.0f;
-    }
+    if (command > 1.0f) command = 1.0f;
+    else if (command < -1.0f) command = -1.0f;
 
-    magnitude = command < 0.0f ? -command : command;
+    magnitude = (command < 0.0f) ? -command : command;
     compare = (uint32_t)(magnitude * (float)PWM_TIM_ARR + 0.5f);
-    if (compare > PWM_TIM_ARR) {
-        compare = PWM_TIM_ARR;
-    }
+    if (compare > PWM_TIM_ARR) compare = PWM_TIM_ARR;
 
-    if (compare == 0u) {
-        __HAL_TIM_SET_COMPARE(rpwm[index].htim, rpwm[index].channel, 0u);
-        __HAL_TIM_SET_COMPARE(lpwm[index].htim, lpwm[index].channel, 0u);
-    } else if (command > 0.0f) {
-        __HAL_TIM_SET_COMPARE(lpwm[index].htim, lpwm[index].channel, 0u);
-        __HAL_TIM_SET_COMPARE(rpwm[index].htim, rpwm[index].channel, compare);
-    } else {
-        __HAL_TIM_SET_COMPARE(rpwm[index].htim, rpwm[index].channel, 0u);
-        __HAL_TIM_SET_COMPARE(lpwm[index].htim, lpwm[index].channel, compare);
-    }
+    dir = (command < 0.0f) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+
+    HAL_GPIO_WritePin(motors[index].dir_port, motors[index].dir_pin, dir);
+    __HAL_TIM_SET_COMPARE(&htim1, motors[index].pwm_channel, compare);
 }
 
 void motor_stop_all(void)
 {
-    uint8_t index;
-    for (index = 0u; index < 4u; index++) {
-        __HAL_TIM_SET_COMPARE(rpwm[index].htim, rpwm[index].channel, 0u);
-        __HAL_TIM_SET_COMPARE(lpwm[index].htim, lpwm[index].channel, 0u);
+    uint8_t i;
+    for (i = 0u; i < 4u; i++) {
+        __HAL_TIM_SET_COMPARE(&htim1, motors[i].pwm_channel, 0u);
+        HAL_GPIO_WritePin(motors[i].dir_port, motors[i].dir_pin, GPIO_PIN_RESET);
+    }
+}
+
+void motor_brake_all(void)
+{
+    uint8_t i;
+    for (i = 0u; i < 4u; i++) {
+        HAL_GPIO_WritePin(motors[i].dir_port, motors[i].dir_pin, GPIO_PIN_SET);
+        __HAL_TIM_SET_COMPARE(&htim1, motors[i].pwm_channel, PWM_TIM_ARR);
     }
 }

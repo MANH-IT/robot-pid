@@ -6,5 +6,6 @@
 void motor_init(void);
 void motor_set(uint8_t index, float command);
 void motor_stop_all(void);
+void motor_brake_all(void);
 
-#endif
+#endif /* MOTOR_H */

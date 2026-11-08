@@ -2,19 +2,24 @@
 
 #include "board.h"
 #include "control.h"
+#include "encoder.h"
 #include "protocol.h"
 #include "robot_config.h"
 
 UART_HandleTypeDef huart2;
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
 
 static uint8_t rx_byte;
 
 static void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_TIM1_Init(void);
-static void MX_TIM3_Init(void);
+static void MX_TIM1_PWM_Init(void);
+static void MX_TIM2_Encoder_Init(void);
+static void MX_TIM3_Encoder_Init(void);
+static void MX_TIM4_Encoder_Init(void);
 static void MX_USART2_UART_Init(void);
 static void Error_Handler(void);
 
@@ -29,8 +34,10 @@ int main(void)
     SystemClock_Config();
 
     MX_GPIO_Init();
-    MX_TIM1_Init();
-    MX_TIM3_Init();
+    MX_TIM1_PWM_Init();
+    MX_TIM2_Encoder_Init();
+    MX_TIM3_Encoder_Init();
+    MX_TIM4_Encoder_Init();
     MX_USART2_UART_Init();
 
     control_init();
@@ -43,16 +50,13 @@ int main(void)
     while (1) {
         uint32_t now;
         protocol_process();
-
         now = HAL_GetTick();
 
         if ((uint32_t)(now - last_control) >= ROBOT_CONTROL_PERIOD_MS) {
             float dt = (float)(now - last_control) / 1000.0f;
             uint8_t enabled;
             last_control = now;
-            if (dt <= 0.0f) {
-                dt = 0.001f;
-            }
+            if (dt <= 0.0f) dt = 0.001f;
             enabled = protocol_is_alive(now);
             control_step(dt, enabled);
         }
@@ -81,9 +85,7 @@ static void SystemClock_Config(void)
     osc.PLL.PLLState = RCC_PLL_ON;
     osc.PLL.PLLSource = RCC_PLLSOURCE_HSE;
     osc.PLL.PLLMUL = RCC_PLL_MUL9;
-    if (HAL_RCC_OscConfig(&osc) != HAL_OK) {
-        Error_Handler();
-    }
+    if (HAL_RCC_OscConfig(&osc) != HAL_OK) Error_Handler();
 
     clocks.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
                        RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
@@ -91,37 +93,30 @@ static void SystemClock_Config(void)
     clocks.AHBCLKDivider = RCC_SYSCLK_DIV1;
     clocks.APB1CLKDivider = RCC_HCLK_DIV2;
     clocks.APB2CLKDivider = RCC_HCLK_DIV1;
-    if (HAL_RCC_ClockConfig(&clocks, FLASH_LATENCY_2) != HAL_OK) {
-        Error_Handler();
-    }
+    if (HAL_RCC_ClockConfig(&clocks, FLASH_LATENCY_2) != HAL_OK) Error_Handler();
 }
 
-static void MX_TIM_PWM_Common(TIM_HandleTypeDef *htim)
+static void MX_TIM1_PWM_Init(void)
 {
     TIM_ClockConfigTypeDef clock_source = {0};
     TIM_MasterConfigTypeDef master = {0};
     TIM_OC_InitTypeDef channel = {0};
 
-    htim->Init.Prescaler = 0u;
-    htim->Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim->Init.Period = PWM_TIM_ARR;
-    htim->Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    htim->Init.RepetitionCounter = 0u;
-    htim->Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-    if (HAL_TIM_PWM_Init(htim) != HAL_OK) {
-        Error_Handler();
-    }
+    htim1.Instance = TIM1;
+    htim1.Init.Prescaler = 0u;
+    htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim1.Init.Period = PWM_TIM_ARR;
+    htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim1.Init.RepetitionCounter = 0u;
+    htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+    if (HAL_TIM_PWM_Init(&htim1) != HAL_OK) Error_Handler();
 
     clock_source.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-    if (HAL_TIM_ConfigClockSource(htim, &clock_source) != HAL_OK) {
-        Error_Handler();
-    }
+    if (HAL_TIM_ConfigClockSource(&htim1, &clock_source) != HAL_OK) Error_Handler();
 
     master.MasterOutputTrigger = TIM_TRGO_RESET;
     master.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-    if (HAL_TIMEx_MasterConfigSynchronization(htim, &master) != HAL_OK) {
-        Error_Handler();
-    }
+    if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &master) != HAL_OK) Error_Handler();
 
     channel.OCMode = TIM_OCMODE_PWM1;
     channel.Pulse = 0u;
@@ -131,31 +126,43 @@ static void MX_TIM_PWM_Common(TIM_HandleTypeDef *htim)
     channel.OCIdleState = TIM_OCIDLESTATE_RESET;
     channel.OCNIdleState = TIM_OCNIDLESTATE_RESET;
 
-    if (HAL_TIM_PWM_ConfigChannel(htim, &channel, TIM_CHANNEL_1) != HAL_OK) {
-        Error_Handler();
-    }
-    if (HAL_TIM_PWM_ConfigChannel(htim, &channel, TIM_CHANNEL_2) != HAL_OK) {
-        Error_Handler();
-    }
-    if (HAL_TIM_PWM_ConfigChannel(htim, &channel, TIM_CHANNEL_3) != HAL_OK) {
-        Error_Handler();
-    }
-    if (HAL_TIM_PWM_ConfigChannel(htim, &channel, TIM_CHANNEL_4) != HAL_OK) {
-        Error_Handler();
-    }
+    if (HAL_TIM_PWM_ConfigChannel(&htim1, &channel, TIM_CHANNEL_1) != HAL_OK) Error_Handler();
+    if (HAL_TIM_PWM_ConfigChannel(&htim1, &channel, TIM_CHANNEL_2) != HAL_OK) Error_Handler();
+    if (HAL_TIM_PWM_ConfigChannel(&htim1, &channel, TIM_CHANNEL_3) != HAL_OK) Error_Handler();
+    if (HAL_TIM_PWM_ConfigChannel(&htim1, &channel, TIM_CHANNEL_4) != HAL_OK) Error_Handler();
 }
 
-static void MX_TIM1_Init(void)
+static void MX_TIM_Encoder_Common(TIM_HandleTypeDef *htim, TIM_TypeDef *instance)
 {
-    htim1.Instance = TIM1;
-    MX_TIM_PWM_Common(&htim1);
+    TIM_Encoder_InitTypeDef sConfig = {0};
+    TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+    htim->Instance = instance;
+    htim->Init.Prescaler = 0;
+    htim->Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim->Init.Period = 65535;
+    htim->Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim->Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+
+    sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
+    sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+    sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
+    sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+    sConfig.IC1Filter = 6;
+    sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
+    sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
+    sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+    sConfig.IC2Filter = 6;
+    if (HAL_TIM_Encoder_Init(htim, &sConfig) != HAL_OK) Error_Handler();
+
+    sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+    sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+    HAL_TIMEx_MasterConfigSynchronization(htim, &sMasterConfig);
 }
 
-static void MX_TIM3_Init(void)
-{
-    htim3.Instance = TIM3;
-    MX_TIM_PWM_Common(&htim3);
-}
+static void MX_TIM2_Encoder_Init(void) { MX_TIM_Encoder_Common(&htim2, TIM2); }
+static void MX_TIM3_Encoder_Init(void) { MX_TIM_Encoder_Common(&htim3, TIM3); }
+static void MX_TIM4_Encoder_Init(void) { MX_TIM_Encoder_Common(&htim4, TIM4); }
 
 static void MX_USART2_UART_Init(void)
 {
@@ -167,9 +174,7 @@ static void MX_USART2_UART_Init(void)
     huart2.Init.Mode = UART_MODE_TX_RX;
     huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
     huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-    if (HAL_UART_Init(&huart2) != HAL_OK) {
-        Error_Handler();
-    }
+    if (HAL_UART_Init(&huart2) != HAL_OK) Error_Handler();
 }
 
 static void MX_GPIO_Init(void)
@@ -180,6 +185,7 @@ static void MX_GPIO_Init(void)
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
 
+    /* LED PC13 */
     HAL_GPIO_WritePin(LED_PORT, LED_PIN, GPIO_PIN_SET);
     init.Pin = LED_PIN;
     init.Mode = GPIO_MODE_OUTPUT_PP;
@@ -187,26 +193,40 @@ static void MX_GPIO_Init(void)
     init.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(LED_PORT, &init);
 
+    /* DIR M1–M4 PB12–PB15 */
+    init.Pin = MOTOR1_DIR_PIN | MOTOR2_DIR_PIN | MOTOR3_DIR_PIN | MOTOR4_DIR_PIN;
+    init.Mode = GPIO_MODE_OUTPUT_PP;
+    init.Pull = GPIO_NOPULL;
+    init.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &init);
+    HAL_GPIO_WritePin(MOTOR1_DIR_PORT, MOTOR1_DIR_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(MOTOR2_DIR_PORT, MOTOR2_DIR_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(MOTOR3_DIR_PORT, MOTOR3_DIR_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(MOTOR4_DIR_PORT, MOTOR4_DIR_PIN, GPIO_PIN_RESET);
+
+    /* ENC4 A (PB8) – EXTI8 */
+    init.Pin = ENC4_A_PIN;
     init.Mode = GPIO_MODE_IT_RISING_FALLING;
     init.Pull = GPIO_PULLUP;
     init.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(ENC4_A_PORT, &init);
 
-    init.Pin = ENC1_A_PIN | ENC1_B_PIN;
-    HAL_GPIO_Init(GPIOB, &init);
+    /* ENC4 B (PB9) – GPIO in */
+    init.Pin = ENC4_B_PIN;
+    init.Mode = GPIO_MODE_INPUT;
+    init.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(ENC4_B_PORT, &init);
 
-    init.Pin = ENC2_A_PIN | ENC2_B_PIN;
-    HAL_GPIO_Init(GPIOB, &init);
-
-    init.Pin = ENC3_A_PIN | ENC3_B_PIN;
-    HAL_GPIO_Init(GPIOB, &init);
-
-    init.Pin = ENC4_A_PIN | ENC4_B_PIN;
-    HAL_GPIO_Init(GPIOB, &init);
+    /* E-stop PB0 – EXTI0 */
+    init.Pin = ESTOP_PIN;
+    init.Mode = GPIO_MODE_IT_FALLING;
+    init.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(ESTOP_PORT, &init);
 
     HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1u, 0u);
     HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-    HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1u, 0u);
-    HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+    HAL_NVIC_SetPriority(EXTI0_IRQn, 0u, 0u);
+    HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 }
 
 void HAL_MspInit(void)
@@ -218,25 +238,40 @@ void HAL_MspInit(void)
 void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
 {
     GPIO_InitTypeDef init = {0};
-
     if (htim->Instance == TIM1) {
         __HAL_RCC_TIM1_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
-        init.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11;
+        init.Pin = MOTOR1_PWM_PIN | MOTOR2_PWM_PIN | MOTOR3_PWM_PIN | MOTOR4_PWM_PIN;
         init.Mode = GPIO_MODE_AF_PP;
         init.Speed = GPIO_SPEED_FREQ_HIGH;
+        HAL_GPIO_Init(GPIOA, &init);
+    }
+}
+
+void HAL_TIM_Encoder_MspInit(TIM_HandleTypeDef *htim)
+{
+    GPIO_InitTypeDef init = {0};
+
+    if (htim->Instance == TIM2) {
+        __HAL_RCC_TIM2_CLK_ENABLE();
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        init.Pin = ENC1_A_PIN | ENC1_B_PIN;
+        init.Mode = GPIO_MODE_INPUT;
+        init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(GPIOA, &init);
     } else if (htim->Instance == TIM3) {
         __HAL_RCC_TIM3_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-
-        init.Pin = GPIO_PIN_6 | GPIO_PIN_7;
-        init.Mode = GPIO_MODE_AF_PP;
-        init.Speed = GPIO_SPEED_FREQ_HIGH;
+        init.Pin = ENC2_A_PIN | ENC2_B_PIN;
+        init.Mode = GPIO_MODE_INPUT;
+        init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(GPIOA, &init);
-
-        init.Pin = GPIO_PIN_0 | GPIO_PIN_1;
+    } else if (htim->Instance == TIM4) {
+        __HAL_RCC_TIM4_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        init.Pin = ENC3_A_PIN | ENC3_B_PIN;
+        init.Mode = GPIO_MODE_INPUT;
+        init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(GPIOB, &init);
     }
 }
@@ -249,12 +284,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
         __HAL_RCC_USART2_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
 
-        init.Pin = GPIO_PIN_2;
+        init.Pin = UART_TX_PIN;
         init.Mode = GPIO_MODE_AF_PP;
         init.Speed = GPIO_SPEED_FREQ_HIGH;
         HAL_GPIO_Init(GPIOA, &init);
 
-        init.Pin = GPIO_PIN_3;
+        init.Pin = UART_RX_PIN;
         init.Mode = GPIO_MODE_INPUT;
         init.Pull = GPIO_PULLUP;
         HAL_GPIO_Init(GPIOA, &init);
@@ -298,54 +333,28 @@ void USART2_IRQHandler(void)
 
 void EXTI9_5_IRQHandler(void)
 {
-    if (EXTI->PR & ENC1_A_PIN) {
-        EXTI->PR = ENC1_A_PIN;
-        control_encoder_isr(0u);
-    }
-    if (EXTI->PR & ENC1_B_PIN) {
-        EXTI->PR = ENC1_B_PIN;
-        control_encoder_isr(0u);
-    }
-    if (EXTI->PR & ENC2_A_PIN) {
-        EXTI->PR = ENC2_A_PIN;
-        control_encoder_isr(1u);
-    }
-    if (EXTI->PR & ENC2_B_PIN) {
-        EXTI->PR = ENC2_B_PIN;
-        control_encoder_isr(1u);
+    if (__HAL_GPIO_EXTI_GET_IT(ENC4_A_PIN) != RESET) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ENC4_A_PIN);
+        control_encoder_isr(3u);
     }
 }
 
-void EXTI15_10_IRQHandler(void)
+void EXTI0_IRQHandler(void)
 {
-    if (EXTI->PR & ENC3_A_PIN) {
-        EXTI->PR = ENC3_A_PIN;
-        control_encoder_isr(2u);
-    }
-    if (EXTI->PR & ENC3_B_PIN) {
-        EXTI->PR = ENC3_B_PIN;
-        control_encoder_isr(2u);
-    }
-    if (EXTI->PR & ENC4_A_PIN) {
-        EXTI->PR = ENC4_A_PIN;
-        control_encoder_isr(3u);
-    }
-    if (EXTI->PR & ENC4_B_PIN) {
-        EXTI->PR = ENC4_B_PIN;
-        control_encoder_isr(3u);
+    if (__HAL_GPIO_EXTI_GET_IT(ESTOP_PIN) != RESET) {
+        __HAL_GPIO_EXTI_CLEAR_IT(ESTOP_PIN);
+        control_emergency_stop();
     }
 }
 
 void HardFault_Handler(void)
 {
     __disable_irq();
-    while (1) {
-    }
+    while (1) {}
 }
 
 static void Error_Handler(void)
 {
     __disable_irq();
-    while (1) {
-    }
+    while (1) {}
 }
