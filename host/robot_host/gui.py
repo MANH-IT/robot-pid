@@ -62,6 +62,8 @@ class RobotGUI(object):
         self._last_telemetry_t = None
         self._last_error = ""
         self._chart_limit = 120.0
+        self._estop_blink = True
+        self._estop_button_color = GREEN
 
         self.root = tk.Tk()
         self.root.title("Mecanum Control Center")
