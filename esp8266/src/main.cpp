@@ -55,7 +55,7 @@ void setup() {
 
     /* --- WiFi AP mode --- */
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD, 6);  // Kênh 6 (ít nhiễu hơn kênh 1)
     IPAddress ip = WiFi.softAPIP();
     Serial.print(F("[WiFi] AP SSID: "));
     Serial.println(WIFI_SSID);
