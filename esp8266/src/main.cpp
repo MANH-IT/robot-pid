@@ -50,7 +50,7 @@ void setup() {
     Serial.println(F("========================================"));
 
     /* --- UART2 kết nối STM32 --- */
-    Serial1.begin(DEBUG_BAUD, SERIAL_8N1, STM32_RX_PIN, STM32_TX_PIN);
+    Serial1.begin(DEBUG_BAUD, SERIAL_8N1, SERIAL_FULL, STM32_TX_PIN);
     Serial.println(F("[UART] UART2 @ 115200 (GPIO13/GPIO15)"));
 
     /* --- WiFi AP mode --- */

@@ -24,8 +24,6 @@ static const int8_t quadrature_table[16] = {
  * - a = 1 nếu HIGH, ngược lại 0
  * - b = 1 nếu HIGH, ngược lại 0
  * Trả về (a<<1)|b */
-///* Đọc trạng thái chân A/B của encoder và mã hóa thành giá trị 2-bit:
- * a = bit 1, b = bit 0 => state = (a << 1) | b */
 static uint8_t read_state(Encoder *enc)
 {
     uint8_t a = (HAL_GPIO_ReadPin(enc->port_a, enc->pin_a) == GPIO_PIN_SET) ? 1u : 0u;
