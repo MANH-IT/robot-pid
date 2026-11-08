@@ -14,15 +14,18 @@ from robot_host.protocol import format_pid, format_rpm, format_stop, parse_telem
 
 
 class SocketPort(object):
+    """SocketPort: wrapper socket TCP cho giao tiếp với ESP8266 bridge"""
     def __init__(self, host, port, timeout=0.05):
         self._socket = socket.create_connection((host, port), timeout=1.0)
         self._socket.settimeout(timeout)
         self._buffer = b""
 
     def write(self, data):
+        """Gửi dữ liệu qua socket"""
         self._socket.sendall(data)
 
     def readline(self):
+        """Đọc một dòng từ socket (chờ '\n')"""
         while b"\n" not in self._buffer:
             try:
                 chunk = self._socket.recv(256)
@@ -35,10 +38,12 @@ class SocketPort(object):
         return line + b"\n"
 
     def close(self):
+        """Đóng socket"""
         self._socket.close()
 
 
 def parse_tcp_endpoint(value):
+    """Parse HOST[:PORT] thành (host, port)"""
     host = value
     port = 8080
     if ":" in value:
@@ -48,6 +53,7 @@ def parse_tcp_endpoint(value):
 
 
 def parse_args():
+    """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Đo đáp ứng bước của một bánh")
     parser.add_argument("--port", default="/dev/ttyUSB0")
     parser.add_argument("--baud", type=int, default=115200)
@@ -63,10 +69,12 @@ def parse_args():
 
 
 def send(serial_port, text):
+    """Gửi text qua serial port"""
     serial_port.write(text.encode("ascii"))
 
 
 def main():
+    """Chương trình chính: gửi bước RPM, ghi CSV, tính overshoot/settle"""
     args = parse_args()
     if args.tcp:
         host, tcp_port = parse_tcp_endpoint(args.tcp)

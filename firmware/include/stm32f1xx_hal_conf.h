@@ -1,6 +1,13 @@
 #ifndef STM32F1xx_HAL_CONF_H
 #define STM32F1xx_HAL_CONF_H
 
+/* ============================================================
+ * STM32F1xx HAL CONFIGURATION
+ * - Cấu hình module HAL được bật cho STM32F103
+ * - HSE 8 MHz, PLL x9 → 72 MHz
+ * - HSI 8 MHz (backup)
+ * ============================================================ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -5,6 +5,7 @@ from robot_host.kinematics import forward_kinematics, inverse_kinematics, wheel_
 
 
 def make_config(**kwargs):
+    """Tạo config cho test"""
     values = dict(wheel_radius_m=0.04, wheelbase_m=0.25, track_width_m=0.20, max_wheel_rpm=1000.0)
     values.update(kwargs)
     return RobotConfig(**values)

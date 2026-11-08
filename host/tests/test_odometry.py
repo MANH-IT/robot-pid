@@ -6,10 +6,12 @@ from robot_host.odometry import Odometry
 
 
 def config():
+    """Tạo config cho test"""
     return RobotConfig(wheel_radius_m=0.04, wheelbase_m=0.25, track_width_m=0.20, max_wheel_rpm=1000.0)
 
 
 def drive(odometry, rpm, duration_s, dt_s=0.01, start_ms=0):
+    """Mô phỏng lái xe: gửi RPM trong duration_s giây"""
     odometry.update(rpm, start_ms)
     steps = int(round(duration_s / dt_s))
     for index in range(1, steps + 1):
