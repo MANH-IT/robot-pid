@@ -13,7 +13,7 @@ class RobotConfig(object):
     - vy_inverted: đảo chiều đi ngang
     - omega_inverted: đảo chiều xoay
     - scale_to_limit: co lại nếu vượt max_rpm
-    - command_rate_hz: tần số gửi lệnh (20 Hz)
+    - command_rate_hz: tần số gửi lệnh (50 Hz)
     - telemetry_timeout_s: timeout telemetry (0.5 s)
     - max_linear_speed: tốc độ tiến tối đa (m/s)
     - max_angular_speed: tốc độ xoay tối đa (rad/s)"""
@@ -30,9 +30,9 @@ class RobotConfig(object):
         serial_port="/dev/ttyUSB0",
         baudrate=115200,
         transport="serial",
-        tcp_host="192.168.4.1",
+        tcp_host="172.20.10.10",
         tcp_port=8080,
-        command_rate_hz=20.0,
+        command_rate_hz=50.0,
         telemetry_timeout_s=0.5,
         max_linear_speed=1.2,
         max_angular_speed=2.5,

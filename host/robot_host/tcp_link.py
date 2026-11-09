@@ -11,13 +11,39 @@ from .protocol import format_stop, parse_telemetry
 class TcpLink(RobotLink):
     """Liên kết TCP tới ESP8266 làm cầu nối trong suốt UART-WiFi.
     - Reader thread: đọc telemetry từ TCP
-    - Writer thread: gửi lệnh 20 Hz
+    - Writer thread: gửi lệnh 50 Hz
     - Auto-reconnect khi mất kết nối"""
     def __init__(self, config):
         RobotLink.__init__(self, config)
         self._socket = None
         self._socket_lock = threading.Lock()
         self._threads = []
+        self._wakeup = threading.Event()
+        self._backoff = 0.5
+
+    def set_endpoint(self, host, port):
+        self.config.tcp_host = str(host)
+        self.config.tcp_port = int(port)
+        return True
+
+    def reconnect(self):
+        """Đóng socket hiện tại và đánh thức reader để nối lại ngay."""
+        with self._socket_lock:
+            sock = self._socket
+            self._socket = None
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+        self._backoff = 0.5
+        self.stop()
+        self._wakeup.set()
+        return True
 
     def start(self):
         reader = threading.Thread(target=self._reader_loop, name="tcp-reader")
@@ -34,6 +60,7 @@ class TcpLink(RobotLink):
             timeout=1.0,
         )
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         sock.settimeout(0.05)
         return sock
 
@@ -46,6 +73,7 @@ class TcpLink(RobotLink):
                 with self._socket_lock:
                     self._socket = sock
                 self._set_connected(True, "")
+                self._backoff = 0.5
                 buffer = b""
                 while not self._stop_event.is_set():
                     try:
@@ -64,6 +92,9 @@ class TcpLink(RobotLink):
                         buffer = buffer[-4096:]
             except Exception as exc:
                 self._set_connected(False, str(exc))
+                # Mất kết nối: xóa target + xếp STOP để lần nối lại không
+                # phát lại lệnh vận tốc cũ (robot không chạy tiếp ngoài ý muốn).
+                self.stop()
             finally:
                 with self._socket_lock:
                     self._socket = None
@@ -73,7 +104,9 @@ class TcpLink(RobotLink):
                     except Exception:
                         pass
             if not self._stop_event.is_set():
-                self._stop_event.wait(1.0)
+                self._wakeup.wait(self._backoff)
+                self._wakeup.clear()
+                self._backoff = min(self._backoff * 2.0, 4.0)
 
     def _writer_loop(self):
         command_period = self.config.command_period_s
@@ -87,6 +120,7 @@ class TcpLink(RobotLink):
                         sock.sendall(line.encode("ascii"))
                     except Exception as exc:
                         self._set_connected(False, str(exc))
+                        self.stop()
                         try:
                             sock.shutdown(socket.SHUT_RDWR)
                         except Exception:

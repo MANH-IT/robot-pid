@@ -159,9 +159,29 @@ void control_step(float dt, uint8_t enabled)
         return;
     }
 
-    for (index = 0u; index < 4u; index++) {
-        float output = pid_update(&pids[index], target_rpm[index], actual_rpm[index], pid_dt);
-        motor_set(index, output);
+    {
+        float outputs[4];
+        uint32_t primask;
+
+        for (index = 0u; index < 4u; index++) {
+            outputs[index] = pid_update(&pids[index], target_rpm[index], actual_rpm[index], pid_dt);
+        }
+
+        /* Áp PWM trong vùng IRQ bị khóa: nếu E-STOP (EXTI0, ưu tiên cao nhất)
+         * xảy ra ngay trước đó, ISR đã đặt emergency_flag + dừng motor; khóa
+         * ngắn (~µs) đảm bảo main không ghi đè lại PWM sau khi ISR đã dừng. */
+        primask = __get_PRIMASK();
+        __disable_irq();
+        if (emergency_flag) {
+            motor_stop_all();
+        } else {
+            for (index = 0u; index < 4u; index++) {
+                motor_set(index, outputs[index]);
+            }
+        }
+        if (primask == 0u) {
+            __enable_irq();
+        }
     }
 }
 

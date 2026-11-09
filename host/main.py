@@ -7,6 +7,7 @@ import math
 import time
 
 from robot_host.config import RobotConfig
+from robot_host.discovery import discover
 from robot_host.gui import RobotGUI
 from robot_host.serial_link import SerialLink
 from robot_host.sim_link import SimulatedLink
@@ -20,9 +21,14 @@ def parse_args():
     parser.add_argument(
         "--tcp",
         nargs="?",
-        const="192.168.4.1:8080",
+        const="172.20.10.10:8080",
         metavar="HOST[:PORT]",
-        help="kết nối TCP tới ESP8266 cầu nối UART-WiFi (mặc định 192.168.4.1:8080)",
+        help="kết nối TCP tới ESP8266 cầu nối UART-WiFi (mặc định 172.20.10.10:8080)",
+    )
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="dò ESP8266 qua UDP broadcast thay vì dùng IP cố định",
     )
     parser.add_argument("--sim", action="store_true", help="chạy mô phỏng, không cần phần cứng")
     parser.add_argument("--monitor", action="store_true", help="chỉ in telemetry, không mở GUI")
@@ -74,13 +80,23 @@ def parse_tcp_endpoint(value):
 
 def main():
     args = parse_args()
-    tcp_host = "192.168.4.1"
+    tcp_host = "172.20.10.10"
     tcp_port = 8080
     transport = "serial"
 
     if args.tcp:
         tcp_host, tcp_port = parse_tcp_endpoint(args.tcp)
         transport = "tcp"
+    if args.discover or tcp_host.lower() == "discover":
+        endpoint = discover()
+        if endpoint is None:
+            raise SystemExit(
+                "Không tìm thấy ESP8266. Kiểm tra laptop đã nối đúng hotspot "
+                "và ESP đã cấp nguồn (hoặc dùng --tcp IP:PORT)."
+            )
+        tcp_host, tcp_port = endpoint
+        transport = "tcp"
+        print("Tìm thấy ESP8266 tại %s:%d" % (tcp_host, tcp_port))
     if args.sim:
         transport = "sim"
 

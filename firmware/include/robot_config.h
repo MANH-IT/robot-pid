@@ -37,8 +37,8 @@
 #define OMEGA_INVERTED      0
 
 /* PWM:
- * - ARR = 3199, prescaler = 0 → 64 MHz / 3200 = 20 kHz */
-#define PWM_TIM_ARR         3199u    /* 64 MHz / 20 kHz - 1 */
+ * - ARR = 3599, prescaler = 0 → 72 MHz / 3600 = 20 kHz */
+#define PWM_TIM_ARR         3599u    /* 72 MHz / 20 kHz - 1 */
 #define PWM_FREQUENCY_HZ    20000u
 
 /* PID:

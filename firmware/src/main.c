@@ -93,17 +93,33 @@ static void SystemClock_Config(void)
     RCC_OscInitTypeDef osc = {0};
     RCC_ClkInitTypeDef clocks = {0};
 
-    /* HSI 8 MHz / 2 = 4 MHz -> PLL ×16 = 64 MHz (tối đa của F1 với HSI).
-     * Không phụ thuộc thạch anh ngoài: nhiều Blue Pill clone dùng thạch anh
-     * 12 MHz hoặc không có thạch anh, khiến giả định HSE = 8 MHz sai và
-     * UART baud lệch hoàn toàn. Sai số HSI ~±1%, đủ cho UART 115200. */
-    osc.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-    osc.HSIState = RCC_HSI_ON;
-    osc.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    /* HSE 8 MHz × PLL 9 = 72 MHz (thạch anh ngoài).
+     * Yêu cầu board có thạch anh 8 MHz đúng chuẩn. Nếu board dùng thạch anh
+     * 12/16 MHz hoặc không có thạch anh, cấu hình này sẽ sai clock/baud:
+     * khi đó chuyển sang HSI: PLLSOURCE_HSI_DIV2 + PLL_MUL16 (64 MHz) và
+     * đặt PWM_TIM_ARR = 3199 trong robot_config.h. */
+    osc.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+    osc.HSEState = RCC_HSE_ON;
+    osc.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
     osc.PLL.PLLState = RCC_PLL_ON;
-    osc.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
-    osc.PLL.PLLMUL = RCC_PLL_MUL16;
-    if (HAL_RCC_OscConfig(&osc) != HAL_OK) Error_Handler();
+    osc.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+    osc.PLL.PLLMUL = RCC_PLL_MUL9;
+
+    if (HAL_RCC_OscConfig(&osc) != HAL_OK) {
+        /* Không khởi động được HSE (board thiếu thạch anh): fallback HSI/2 ×16
+         * = 64 MHz. Baud 115200 vẫn đúng vì HAL tính từ PCLK thực tế; PWM còn
+         * 64 MHz / 3600 = 17,78 kHz (chấp nhận được). */
+        RCC_OscInitTypeDef hsi = {0};
+        hsi.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+        hsi.HSIState = RCC_HSI_ON;
+        hsi.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+        hsi.PLL.PLLState = RCC_PLL_ON;
+        hsi.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
+        hsi.PLL.PLLMUL = RCC_PLL_MUL16;
+        if (HAL_RCC_OscConfig(&hsi) != HAL_OK) {
+            Error_Handler();
+        }
+    }
 
     clocks.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
                        RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;

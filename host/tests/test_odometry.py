@@ -59,3 +59,16 @@ def test_reset():
     assert odometry.pose.y == 0.0
     assert odometry.pose.theta == 0.0
     assert odometry.total_distance_m == 0.0
+
+
+def test_odometry_ignores_gap_over_one_second():
+    cfg = config()
+    odometry = Odometry(cfg)
+    rpm = inverse_kinematics(0.5, 0.0, 0.0, cfg)
+    odometry.update(rpm, 0)
+    # Gap > 1 s: bỏ qua bước này để tránh nhảy vị trí
+    pose = odometry.update(rpm, 5000)
+    assert pose.x == pytest.approx(0.0)
+    # Bước kế tiếp dùng mốc thời gian mới (dt = 0.1 s), không tích lũy quãng 5 s
+    pose = odometry.update(rpm, 5100)
+    assert pose.x == pytest.approx(0.05, abs=1e-3)

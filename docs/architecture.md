@@ -8,7 +8,7 @@
 │  - GUI Tkinter / teleop                                     │
 │  - Động học nghịch Mecanum (vx, vy, ω) → RPM 4 bánh         │
 │  - Odometry (RPM thực → x, y, θ)                            │
-│  - Gửi lệnh 20 Hz, nhận telemetry 50 Hz                     │
+│  - Gửi lệnh 50 Hz, nhận telemetry 50 Hz                     │
 └──────────────────────────────┬─────────────────────────────┘
                                │ WiFi TCP (hoặc USB-UART)
 ┌──────────────────────────────┴─────────────────────────────┐
@@ -17,7 +17,7 @@
                                │ UART2 115200 8N1
                                │ TX/RX dạng text, newline
 ┌──────────────────────────────┴─────────────────────────────┐
-│ CẤP THẤP: STM32F103C8T6 @ 64 MHz (HSI)                           │
+│ CẤP THẤP: STM32F103C8T6 @ 72 MHz                           │
 │  - TIM2/TIM4 encoder mode cho bánh 1 & 3 (x4)               │
 │  - EXTI10/EXTI8 + giải mã mềm cho bánh 2 & 4 (x2)           │
 │  - Đo RPM mỗi 10 ms                                         │
@@ -37,7 +37,7 @@ ESP8266 chỉ là cầu nối byte trong suốt, không xử lý giao thức. M�
 ## 2. Luồng dữ liệu
 
 1. GUI đặt vận tốc thân `(vx, vy, ω)` hoặc 4 RPM trực tiếp, hoặc duty PWM thủ công cho một bánh.
-2. Host tính động học nghịch → 4 RPM đặt, đóng gói `V,...` / `R,...` / `M,...`, gửi 20 Hz qua USB-UART hoặc TCP tới ESP8266.
+2. Host tính động học nghịch → 4 RPM đặt, đóng gói `V,...` / `R,...` / `M,...`, gửi 50 Hz qua USB-UART hoặc TCP tới ESP8266.
 3. ESP8266 chuyển nguyên văn byte xuống UART2; STM32 nhận UART ngắt từng byte, parser dòng lệnh, cập nhật setpoint.
 4. Mỗi 10 ms: đọc delta encoder, tính RPM thực, chạy 4 PID, xuất RPWM/LPWM.
 5. Mỗi 20 ms: gửi `T,...` gồm RPM thực và RPM đặt.
@@ -105,7 +105,7 @@ Thông số mặc định trong `robot_config.h` chỉ để khởi động: `Kp
 
 ## 6. PWM và driver
 
-- Timer clock 64 MHz, `ARR = 3199`, prescaler 0 → PWM 20 kHz.
+- Timer clock 72 MHz, `ARR = 3599`, prescaler 0 → PWM 20 kHz.
 - **BTS7960 (IBT-2):** mỗi bánh cần 2 kênh PWM riêng (RPWM và LPWM). Firmware hiện tại xuất **8 kênh**:
   - RPWM bánh 1–4: PA8, PA9, PA10, PA11 (TIM1_CH1–CH4)
   - LPWM bánh 1–4: PA6, PA7, PB0, PB1 (TIM3_CH1–CH4)

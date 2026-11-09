@@ -34,7 +34,7 @@ void motor_init(void)
     }
 }
 
-/* Đặt duty cho motor index (0..3) – BTS7960:
+/* Đặt duty cho motor index (0..3) – BTS7960 (đã áp MOTOR_INVERT_MASK):
  * - command > 0: tiến → RPWM = duty, LPWM = 0
  * - command < 0: lùi  → RPWM = 0, LPWM = |duty|
  * - command = 0: dừng → cả hai = 0 (coast)
@@ -45,6 +45,12 @@ void motor_set(uint8_t index, float command)
     uint32_t compare;
 
     if (index >= 4u) return;
+
+    /* Đảo chiều bánh bị đấu dây ngược (xem board.h). Encoder của cùng bánh
+     * phải được đảo tương ứng qua ENCODER_INVERT_MASK để PID giữ đúng dấu. */
+    if (((MOTOR_INVERT_MASK) >> index) & 1u) {
+        command = -command;
+    }
 
     if (command > 1.0f) command = 1.0f;
     else if (command < -1.0f) command = -1.0f;

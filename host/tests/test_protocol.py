@@ -40,3 +40,16 @@ def test_parse_telemetry_rejects_bad_lines():
     assert parse_telemetry("V,1,2,3") is None
     assert parse_telemetry("T,1,2,3") is None
     assert parse_telemetry("T,x,1,2,3,4,5,6,7,8") is None
+
+
+# Test parse_telemetry: chấp nhận CRLF/khoảng trắng thừa
+def test_parse_telemetry_strips_whitespace():
+    telemetry = parse_telemetry(" T,100,0,0,0,0,0,0,0,0\r\n")
+    assert telemetry is not None
+    assert telemetry.t_ms == 100
+    assert telemetry.rpm_actual == [0.0, 0.0, 0.0, 0.0]
+
+
+# Test parse_telemetry: giá trị âm và số thực bị từ chối
+def test_parse_telemetry_rejects_non_integer():
+    assert parse_telemetry("T,1,1.5,0,0,0,0,0,0,0") is None

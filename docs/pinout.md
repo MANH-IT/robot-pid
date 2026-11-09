@@ -193,22 +193,22 @@ Lưu ý mức logic:
 
 ### 4.4 Bus 3,3 V → ESP8266 (NodeMCU V3)
 
-Firmware bridge hiện tại chạy trên **NodeMCU V3** (`env:nodemcuv2`), dùng UART1:
+Firmware bridge hiện tại chạy trên **NodeMCU V3** (`env:nodemcuv2`), dùng UART0 qua `Serial.swap()` (UART1 không có RX):
 
 | NodeMCU V3 | Nối |
 |---|---|
 | VIN (5 V) | Bus 5 V (khuyến nghị, qua regulator onboard) |
 | 3V3 | Chỉ dùng khi đã ngắt USB; không cấp đồng thời VIN và 3V3 |
 | GND | GND chung |
-| GPIO13 (RX) | PA2 (USART2_TX của STM32) |
-| GPIO15 (TX) | PA3 (USART2_RX của STM32) |
+| GPIO13 (D7, RX sau swap) | PA2 (USART2_TX của STM32) |
+| GPIO15 (D8, TX sau swap) | PA3 (USART2_RX của STM32) |
 | EN / CH_PD | 3,3 V (module đã kéo sẵn) |
 | GPIO0 | 3,3 V khi chạy bình thường |
 
 - NodeMCU V3 có thể hút ~300–500 mA khi phát WiFi; dùng buck 3,3 V ≥ 1 A nếu không cấp qua VIN.
 - Đặt **470 µF/10 V + 100 nF** sát chân nguồn của module để chịu đỉnh dòng WiFi.
 - PA2/PA3 của STM32 là 3,3 V nên nối trực tiếp TX↔RX (chéo).
-- **ESP-01S không dùng được với sketch hiện tại** vì ESP-01S không có GPIO13/GPIO15. Nếu vẫn dùng ESP-01S, phải sửa `esp8266/src/main.cpp` sang UART0 (GPIO1/GPIO3) và nạp qua USB-TTL 3,3 V.
+- **ESP-01S không dùng được với sketch hiện tại** vì ESP-01S không có GPIO13/GPIO15. Nếu vẫn dùng ESP-01S, phải bỏ `Serial.swap()` để dùng UART0 trên GPIO1/GPIO3 và nạp qua USB-TTL 3,3 V.
 
 ### 4.5 Encoder Hall → STM32
 
@@ -296,8 +296,8 @@ Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**.
 
 ### 4.9 Timer và tần số PWM
 
-- HCLK = 64 MHz (HSI nội ×16); TIM1, TIM2, TIM3, TIM4 đều nhận clock 64 MHz.
-- PWM: Prescaler = 0, ARR = 3199 ⇒ `64 MHz / 3200 = 20 kHz`.
+- HCLK = 72 MHz; TIM1, TIM2, TIM3, TIM4 đều nhận clock 72 MHz.
+- PWM: Prescaler = 0, ARR = 3599 ⇒ `72 MHz / 3600 = 20 kHz`.
 - TIM1 CH1–CH4 (PA8–PA11) → RPWM bánh 1–4.
 - TIM3 CH1–CH4 (PA6, PA7, PB0, PB1) → LPWM bánh 1–4.
 - TIM2/TIM4 ở encoder mode TI12 → encoder bánh 1 & 3 (x4).

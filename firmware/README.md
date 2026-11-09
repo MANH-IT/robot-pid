@@ -5,8 +5,11 @@
 ```bash
 pio run
 pio run -t upload
-pio device monitor -b 115200
 ```
+
+USART2 (PA2/PA3) nối tới ESP8266/USB-UART, **không** qua USB của Blue Pill — nên
+không dùng `pio device monitor` để xem telemetry; dùng `python3 host/main.py --tcp ...`
+hoặc `--port` tới USB-UART đang nối PA2/PA3.
 
 Nếu chưa có PlatformIO:
 
@@ -14,7 +17,7 @@ Nếu chưa có PlatformIO:
 pip install platformio
 ```
 
-Board: `bluepill_f103c8`, framework `stm32cube`, clock 64 MHz từ HSI nội (PLL x16/2).
+Board: `bluepill_f103c8`, framework `stm32cube`, clock 72 MHz từ HSE 8 MHz (PLL x9).
 Upload mặc định dùng ST-Link.
 
 ## Cấu trúc thư mục
@@ -39,7 +42,7 @@ Upload mặc định dùng ST-Link.
 #define ENCODER_CPR 1320.0f   /* bánh 1 & 3, x4 (11×30×4) */
 #define ENCODER4_CPR 660.0f   /* bánh 2 & 4, x2 (11×30×2) */
 #define MAX_WHEEL_RPM 333.0f
-#define PWM_TIM_ARR 3199u     /* 64 MHz / 20 kHz - 1 */
+#define PWM_TIM_ARR 3599u     /* 72 MHz / 20 kHz - 1 */
 #define ROBOT_CONTROL_PERIOD_MS 10u
 #define ROBOT_TELEMETRY_PERIOD_MS 20u
 #define ROBOT_UART_TIMEOUT_MS 500u
@@ -50,6 +53,21 @@ Upload mặc định dùng ST-Link.
 ```
 
 Các thông số này **phải được hiệu chuẩn** theo robot thật, xem `docs/calibration.md`.
+
+## Đảo chiều bánh (đấu dây motor/encoder ngược)
+
+Trong `include/board.h`:
+
+```c
+#define MOTOR_INVERT_MASK   0x0u   /* bit0..3 = M1..M4 */
+#define ENCODER_INVERT_MASK 0x0u
+```
+
+- Bánh phải (M2, M4) quay ngược chiều tiến: đặt cả hai mask `0x0A`.
+- Cả 4 bánh ngược: `0x0F`.
+- Bánh quay đúng chiều nhưng RPM âm: chỉ đảo `ENCODER_INVERT_MASK` của bánh đó.
+- Chỉ đảo motor mà không đảo encoder cùng bánh → PID hồi tiếp sai dấu, xe chạy full-speed.
+  Kiểm tra bằng `M,1,0.10` với bánh kê cao, xem `docs/calibration.md` mục 1.
 
 ## Vòng lặp chính
 

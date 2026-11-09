@@ -4,6 +4,7 @@ import threading
 import time
 from collections import deque
 
+from .kinematics import inverse_kinematics
 from .odometry import Odometry
 from .protocol import (
     format_deadzone,
@@ -47,6 +48,14 @@ class RobotLink(object):
 
     def _on_close(self):
         pass
+
+    def set_endpoint(self, host, port):
+        """Đổi đích kết nối (chỉ TcpLink hỗ trợ). Trả về True nếu đã áp dụng."""
+        return False
+
+    def reconnect(self):
+        """Buộc kết nối lại (chỉ TcpLink hỗ trợ)."""
+        return False
 
     def set_velocity(self, vx, vy, omega):
         with self._lock:
@@ -113,7 +122,16 @@ class RobotLink(object):
                 return "periodic", format_rpm(self._target_rpm)
             if self._mode == "manual":
                 return "periodic", format_manual(self._manual[0], self._manual[1])
-            return "periodic", format_velocity(*self._target_velocity)
+            # Chế độ vận tốc: host tự tính động học nghịch (theo hình học và
+            # --invert-vy/--invert-omega) rồi gửi RPM, để các cờ CLI có hiệu lực
+            # trên robot thật thay vì phụ thuộc hằng số trong firmware.
+            rpms = inverse_kinematics(
+                self._target_velocity[0],
+                self._target_velocity[1],
+                self._target_velocity[2],
+                self.config,
+            )
+            return "periodic", format_rpm(rpms)
 
     def _command_line(self):
         """Giữ tương thích: peek + commit ngay (dùng khi chắc chắn gửi được)."""

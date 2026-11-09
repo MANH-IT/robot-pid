@@ -11,7 +11,7 @@
 | Logic | 3,3 V |
 | Kết thúc dòng | `\n` (firmware bỏ qua `\r`) |
 | Độ dài dòng tối đa | 95 ký tự |
-| Chu kỳ lệnh host | 20 Hz |
+| Chu kỳ lệnh host | 50 Hz |
 | Chu kỳ telemetry | 20 ms (50 Hz) |
 
 Nối chéo TX/RX, nối chung GND. Không nối 5 V của Blue Pill với ESP8266 hoặc USB-UART.
@@ -46,6 +46,12 @@ Có thể bỏ tiền tố `V,` khi gửi đúng 3 số:
 ```
 0.3,0,0
 ```
+
+> **Host GUI gửi gì?** `main.py`/GUI tự tính động học nghịch (theo `--wheelbase`,
+> `--track`, `--wheel-radius`, `--invert-vy`, `--invert-omega`) rồi gửi `R,...`
+> để các cờ CLI có hiệu lực trên robot thật. Firmware vẫn chấp nhận `V,...`
+> (ví dụ `web_control.py` gửi trực tiếp) và tự tính với `VY_INVERTED`/
+> `OMEGA_INVERTED` trong `robot_config.h`.
 
 ### 2.2 Lệnh RPM trực tiếp
 
@@ -121,7 +127,7 @@ M,<index>,<duty>\n
 - `duty`: -1.0 .. 1.0, dấu quyết định chiều quay.
 
 Lệnh này đưa **một bánh** sang chế độ vòng hở, bỏ qua PID, để đo dead-zone và đặc tính PWM–RPM.
-Các bánh còn lại dừng. Host phải gửi lặp lại `M,...` (20 Hz) để duy trì chế độ; gửi `V,...`, `R,...` hoặc `STOP` sẽ thoát chế độ thủ công.
+Các bánh còn lại dừng. Host phải gửi lặp lại `M,...` (50 Hz) để duy trì chế độ; gửi `V,...`, `R,...` hoặc `STOP` sẽ thoát chế độ thủ công.
 Timeout 500 ms vẫn có hiệu lực.
 
 Ví dụ:
@@ -162,7 +168,7 @@ Gửi RPM ×10 để tránh printf số thực trên MCU, giảm flash và CPU.
   - reset PID,
   - đặt cả 8 kênh RPWM/LPWM = 0,
   - tiếp tục gửi telemetry.
-- Host gửi lệnh 20 Hz ngay cả khi robot đứng yên (`V,0,0,0`) để duy trì kết nối.
+- Host gửi lệnh 50 Hz ngay cả khi robot đứng yên (`R,0,0,0,0` hoặc `V,0,0,0`) để duy trì kết nối.
 - Sau timeout, cần một lệnh hợp lệ mới để chạy lại.
 
 Các dòng lệnh không hợp lệ không được tính là "alive".

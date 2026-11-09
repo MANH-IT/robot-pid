@@ -14,7 +14,5 @@ esp8266/src/secrets.h
 .DS_Store
 
 # Junk files
-cd
-pio
 *.bak
 platformio-core-installer-develop/

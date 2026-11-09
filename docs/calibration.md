@@ -23,13 +23,16 @@ Tab **RPM trực tiếp** có các ô:
 
 ## 1. Kiểm tra chiều encoder và thứ tự bánh
 
-Với bánh đã kê:
+Với bánh đã kê (xe kê cao, bánh quay không tải):
 
-1. Gửi `PWM thủ công` bánh 1, duty `0.10`.
-2. Xem RPM thực bánh 1 trên GUI.
-3. Nếu RPM âm trong khi bánh quay theo chiều tiến, đặt `ENC1_INVERT 1` trong `firmware/include/board.h`.
-4. Lặp lại cho bánh 2, 3, 4.
-5. Kiểm tra đúng bánh nào là FL/FR/RL/RR. Nếu sai, đổi dây motor/encoder tương ứng, không đổi công thức động học.
+1. Gửi `PWM thủ công` bánh 1, duty `0.10` (`M,1,0.10`). Xác định chiều quay thực.
+2. Nếu bánh quay **ngược chiều tiến** nhưng RPM hiển thị **cùng dấu** duty: đảo bit bánh đó trong `MOTOR_INVERT_MASK` (`firmware/include/board.h`).
+3. Nếu bánh quay **đúng chiều tiến** nhưng RPM hiển thị **ngược dấu** duty: đảo bit bánh đó trong `ENCODER_INVERT_MASK`.
+4. Nếu robot chạy ngược chiều yêu cầu ở chế độ PID (RPM bám đúng setpoint nhưng bánh chạy sai chiều): đảo **cả hai** mask của bánh đó.
+5. Lặp lại cho bánh 2, 3, 4. Bit: M1=0x1, M2=0x2, M3=0x4, M4=0x8; bánh phải ngược = `0x0A`, cả 4 ngược = `0x0F`.
+6. Kiểm tra đúng bánh nào là FL/FR/RL/RR. Nếu sai, đổi dây motor/encoder tương ứng, không đổi công thức động học.
+
+> **Quan trọng:** đảo motor mà không đảo encoder của cùng bánh sẽ làm PID hồi tiếp sai dấu (xe chạy full-speed ngoài kiểm soát). Luôn thử với bánh kê cao và tay sẵn sàng ngắt nguồn.
 
 > **Lưu ý bánh 2 (FR) & 4 (RR):** firmware chỉ ngắt cạnh A của encoder 2 (PB10) / encoder 4 (PB8) và đọc B thụ động (PB11 / PB9), nên đếm **x2** thay vì x4. Firmware dùng CPR riêng `ENCODER4_CPR = 660` cho cả hai bánh nên RPM báo **đúng**, nhưng độ phân giải chỉ bằng một nửa. Trước khi hiệu chuẩn odometry, lưu ý độ nhiễu cao hơn của bánh 2 & 4; muốn x4 đầy đủ cần thêm EXTI cho PB11/PB9 hoặc dùng timer encoder.
 
@@ -121,8 +124,10 @@ P,4,0.002,0,0
 
 ### 4.2 Tăng Kp
 
-1. Gửi bước 100 RPM cho một bánh: `R,100,0,0,0` (hoặc dùng GUI).
-2. Quan sát telemetry/GUI. Tăng `Kp` dần `0.002 → 0.003 → 0.004 → ...`.
+1. Gửi bước 100 RPM cho một bánh: `R,100,0,0,0`, hoặc dùng tab **XUNG** trong GUI
+   (Bậc thang: biên độ 100 RPM, độ rộng 800 ms, số xung 1) để lặp lại nhiều lần.
+2. Quan sát telemetry/GUI. Tab **XUNG** hiện ngay rise time, overshoot, settling
+   và sai số xác lập của cú xung vừa chạy. Tăng `Kp` dần `0.002 → 0.003 → 0.004 → ...`.
 3. Dừng khi đáp ứng nhanh nhưng overshoot còn dưới 10%.
 4. Nếu dao động, giảm `Kp` hoặc thêm `Kd`.
 
@@ -141,7 +146,11 @@ P,4,0.002,0,0
 ### 4.5 Ghi kết quả
 
 Khi đạt yêu cầu, cập nhật mặc định trong `firmware/src/control.c` hoặc `robot_config.h`.
+Có thể dùng **Xung vuông** (ví dụ 1 Hz, duty 50%) để quan sát độ bám setpoint lặp lại
+và phát hiện trễ/overshoot trên biểu đồ RPM.
 Nếu mỗi bánh khác nhau, sửa vòng khởi tạo PID trong `control.c` để dùng gain riêng.
+Dùng **Xuất CSV xung** để lưu mẫu đáp ứng, hoặc **CSV telemetry** ở tab NHẬT KÝ để
+phân tích toàn bộ quá trình bằng công cụ ngoài.
 
 ## 5. Hiệu chuẩn odometry
 
@@ -189,7 +198,7 @@ R_eff = 0.04 · 2.00 / 2.10 = 0.0381 m
 5. Cắm lại, gửi lệnh mới, robot chạy lại bình thường.
 
 Nếu không dừng, kiểm tra:
-- Host có thực sự gửi lệnh 20 Hz không.
+- Host có thực sự gửi lệnh 50 Hz không.
 - `ROBOT_UART_TIMEOUT_MS` trong firmware.
 - Dây TX/RX và GND.
 

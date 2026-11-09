@@ -4,106 +4,201 @@
  * Chức năng:
  * - Kết nối WiFi STA (SSID/mật khẩu trong secrets.h, xem secrets.example.h)
  * - Lắng nghe TCP port 8080
- * - Chuyển byte TCP → UART2 (TX/RX với STM32)
- * - Chuyển byte UART2 → TCP (telemetry)
+ * - Chuyển byte TCP → UART0 (TX/RX với STM32)
+ * - Chuyển byte UART0 → TCP (telemetry)
  * - Không xử lý logic, chỉ bridge trong suốt
  *
  * Kết nối:
  * - GPIO13 (RX) ← PA2 (TX của STM32)
  * - GPIO15 (TX) → PA3 (RX của STM32)
- * - Debug: Serial (USB) @ 115200
+ *
+ * QUAN TRỌNG: ESP8266 chỉ có MỘT UART phần cứng đầy đủ (UART0).
+ * UART1 (Serial1) chỉ truyền được và không có RX, nên bridge dùng UART0
+ * qua Serial.swap() → RX=GPIO13, TX=GPIO15. USB (GPIO1/GPIO3) bị ngắt
+ * khỏi UART0 sau swap, nên log debug được gửi qua TCP thay vì Serial.
  */
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <stdarg.h>
+#include <stdio.h>
+
 #include "secrets.h"
 
 /* ============================================================
  * CẤU HÌNH
  * ============================================================ */
 #define TCP_PORT        8080
+#define LINK_BAUD       115200
+#define DISCOVERY_PORT  8266
 
-/* UART2 của ESP8266: GPIO13 (RX), GPIO15 (TX) – kết nối STM32 */
+/* UART0 sau swap: GPIO13 (RX), GPIO15 (TX) – kết nối STM32 */
 #define STM32_RX_PIN    13   /* ESP RX ← STM32 TX (PA2) */
 #define STM32_TX_PIN    15   /* ESP TX → STM32 RX (PA3) */
 
-/* UART debug (USB) */
-#define DEBUG_BAUD      115200
+/* Log debug qua TCP: đệm vài dòng trước khi client kết nối */
+#define LOG_LINE_MAX    96
+#define LOG_QUEUE_LINES 8
 
 /* ============================================================
  * BIẾN TOÀN CỤC
  * ============================================================ */
 WiFiServer server(TCP_PORT);
 WiFiClient client;
+WiFiUDP udp;
+
+static char log_queue[LOG_QUEUE_LINES][LOG_LINE_MAX];
+static uint8_t log_head;
+static uint8_t log_count;
+
+/* ============================================================
+ * LOG QUA TCP (không dùng Serial để tránh nhiễu đường UART)
+ * ============================================================ */
+static void log_flush(void)
+{
+    while (log_count > 0u && client && client.connected()) {
+        client.println(log_queue[log_head]);
+        log_head = (uint8_t)((log_head + 1u) % LOG_QUEUE_LINES);
+        log_count--;
+    }
+}
+
+static void logf(const char *fmt, ...)
+{
+    char line[LOG_LINE_MAX];
+    va_list args;
+
+    va_start(args, fmt);
+    vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+
+    if (client && client.connected()) {
+        client.println(line);
+        return;
+    }
+
+    if (log_count < LOG_QUEUE_LINES) {
+        uint8_t slot = (uint8_t)((log_head + log_count) % LOG_QUEUE_LINES);
+        strncpy(log_queue[slot], line, LOG_LINE_MAX - 1u);
+        log_queue[slot][LOG_LINE_MAX - 1u] = '\0';
+        log_count++;
+    }
+}
 
 /* ============================================================
  * SETUP
  * ============================================================ */
 void setup() {
-    /* --- UART debug (USB) --- */
-    Serial.begin(DEBUG_BAUD);
-    delay(100);
-    Serial.println();
-    Serial.println(F("========================================"));
-    Serial.println(F("  ESP8266 BRIDGE – ROBOT MECANUM"));
-    Serial.println(F("========================================"));
+    /* --- UART0 dùng cho STM32: swap sang GPIO13 (RX) / GPIO15 (TX) --- */
+    Serial.begin(LINK_BAUD);
+    Serial.swap();
+    /* Xóa byte rác có thể còn trong buffer RX lúc boot */
+    while (Serial.available()) {
+        (void)Serial.read();
+    }
 
-    /* --- UART2 kết nối STM32 --- */
-    Serial1.begin(DEBUG_BAUD, SERIAL_8N1, SERIAL_FULL, STM32_TX_PIN);
-    Serial.println(F("[UART] UART2 @ 115200 (GPIO13/GPIO15)"));
+    logf("========================================");
+    logf("  ESP8266 BRIDGE – ROBOT MECANUM");
+    logf("========================================");
+    logf("[UART] UART0 @ %d (RX=GPIO%d, TX=GPIO%d)", LINK_BAUD, STM32_RX_PIN, STM32_TX_PIN);
 
     /* --- WiFi STA mode (kết nối Hotspot điện thoại) --- */
     WiFi.mode(WIFI_STA);
+    /* Tắt modem sleep: mặc định ESP8266 ngủ giữa các beacon, gói TCP bị
+     * giữ 100–500 ms → điều khiển cảm giác trễ, thả phím vẫn trôi. */
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.print(F("[WiFi] Dang ket noi "));
-    Serial.println(WIFI_SSID);
+    logf("[WiFi] Dang ket noi %s", WIFI_SSID);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(F("."));
     }
-    Serial.println();
-    Serial.print(F("[WiFi] SSID: "));
-    Serial.println(WIFI_SSID);
-    Serial.print(F("[WiFi] IP cua ESP8266: "));
-    Serial.println(WiFi.localIP());
+    logf("[WiFi] SSID: %s", WIFI_SSID);
+    logf("[WiFi] IP cua ESP8266: %s", WiFi.localIP().toString().c_str());
 
-    /* --- TCP server --- */
+    /* --- TCP server + discovery (UDP broadcast, mDNS) --- */
     server.begin();
     server.setNoDelay(true);
-    Serial.print(F("[TCP] Server port: "));
-    Serial.println(TCP_PORT);
-    Serial.println(F("[READY] Cho ket noi TCP..."));
-    Serial.println(F("========================================"));
+    udp.begin(DISCOVERY_PORT);
+    if (MDNS.begin("robot")) {
+        MDNS.addService("robot", "tcp", TCP_PORT);
+    }
+    logf("[TCP] Server port: %d", TCP_PORT);
+    logf("[DISC] UDP %d / mdns robot.local", DISCOVERY_PORT);
+    logf("[READY] Cho ket noi TCP...");
+    logf("========================================");
 }
 
 /* ============================================================
  * LOOP
  * ============================================================ */
+/* Trả lời gói dò tìm "ROBOT?" của host: "ROBOT!<ip>:<port>\n" */
+static void handle_discovery(void)
+{
+    int size = udp.parsePacket();
+    if (size <= 0) {
+        return;
+    }
+    char request[16];
+    int length = udp.read(request, sizeof(request) - 1);
+    if (length <= 0) {
+        return;
+    }
+    request[length] = '\0';
+    if (strncmp(request, "ROBOT?", 6) == 0) {
+        udp.beginPacket(udp.remoteIP(), udp.remotePort());
+        udp.printf("ROBOT!%s:%d\n", WiFi.localIP().toString().c_str(), TCP_PORT);
+        udp.endPacket();
+    }
+}
+
 void loop() {
+    handle_discovery();
+
     /* --- Chấp nhận client mới --- */
     if (!client || !client.connected()) {
         WiFiClient newClient = server.available();
         if (newClient) {
             client = newClient;
             client.setNoDelay(true);
-            Serial.print(F("[TCP] Client connected: "));
-            Serial.println(client.remoteIP());
+            log_flush();
+            logf("[TCP] Client connected: %s", client.remoteIP().toString().c_str());
         }
     }
 
-    /* --- TCP → UART2 (lệnh từ host) --- */
+    /* --- TCP → UART0 (lệnh từ host) --- */
     if (client && client.connected()) {
+        uint8_t buf[128];
+        size_t n = 0;
         while (client.available()) {
-            uint8_t byte = (uint8_t)client.read();
-            Serial1.write(byte);
+            if (n == sizeof(buf)) {
+                Serial.write(buf, n);
+                n = 0;
+            }
+            buf[n++] = (uint8_t)client.read();
+        }
+        if (n > 0u) {
+            Serial.write(buf, n);
         }
     }
 
-    /* --- UART2 → TCP (telemetry từ STM32) --- */
-    while (Serial1.available()) {
-        uint8_t byte = (uint8_t)Serial1.read();
-        if (client && client.connected()) {
-            client.write(byte);
+    /* --- UART0 → TCP (telemetry từ STM32) --- */
+    {
+        uint8_t buf[128];
+        size_t n = 0;
+        while (Serial.available()) {
+            if (n == sizeof(buf)) {
+                if (client && client.connected()) {
+                    client.write(buf, n);
+                }
+                n = 0;
+            }
+            buf[n++] = (uint8_t)Serial.read();
+        }
+        if (n > 0u && client && client.connected()) {
+            client.write(buf, n);
         }
     }
 }

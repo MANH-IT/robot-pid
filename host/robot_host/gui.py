@@ -1,11 +1,16 @@
 """Giao diện Tkinter điều khiển robot Mecanum."""
 
+import csv
 import math
+import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
 from collections import deque
-from tkinter import ttk
+from tkinter import filedialog, ttk
+
+from .discovery import discover
+from .pulse import analyze_step, build_plan
 
 
 BG = "#ffffff"
@@ -64,6 +69,20 @@ class RobotGUI(object):
         self._chart_limit = 120.0
         self._estop_blink = True
         self._estop_button_color = GREEN
+        self._pulse_active = False
+        self._pulse_after_id = None
+        self._pulse_plan = []
+        self._pulse_index = 0
+        self._pulse_phase_started = 0.0
+        self._pulse_samples = []
+        self._pulse_on_start = 0.0
+        self._pulse_on_duration = 0.0
+        self._pulse_amplitude = 0.0
+        self._pulse_metrics = None
+        self._telemetry_log = deque(maxlen=60000)
+        self._log_entries = deque(maxlen=3000)
+        self._discover_running = False
+        self._discover_result = None
 
         self.root = tk.Tk()
         self.root.title("Mecanum Control Center")
@@ -72,6 +91,8 @@ class RobotGUI(object):
         self.root.configure(bg=BG)
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
+        self._log_filter_var = tk.StringVar(value="Tất cả")
+        self._log_follow_var = tk.BooleanVar(value=True)
 
         families = set(tkfont.families(self.root))
         # Prioritize fonts that support Vietnamese diacritics
@@ -142,6 +163,17 @@ class RobotGUI(object):
             lightcolor=BORDER,
             darkcolor=BORDER,
             padding=6,
+        )
+        style.configure(
+            "Dark.TCombobox",
+            fieldbackground=INPUT,
+            background=CARD_ALT,
+            foreground=TEXT,
+            arrowcolor=TEXT,
+            bordercolor=BORDER,
+            lightcolor=BORDER,
+            darkcolor=BORDER,
+            padding=4,
         )
         style.configure(
             "Vertical.TScrollbar",
@@ -335,25 +367,133 @@ class RobotGUI(object):
         self.notebook = ttk.Notebook(right)
         self.notebook.pack(fill="both", expand=True)
         calibration_tab = tk.Frame(self.notebook, bg=BG)
+        pulse_tab = tk.Frame(self.notebook, bg=BG)
         log_tab = tk.Frame(self.notebook, bg=BG)
         self.notebook.add(calibration_tab, text="HIỆU CHUẨN")
+        self.notebook.add(pulse_tab, text="XUNG")
         self.notebook.add(log_tab, text="NHẬT KÝ")
         self._build_calibration_tab(calibration_tab)
+        self._build_pulse_tab(pulse_tab)
         self._build_log_tab(log_tab)
 
     def _build_connection_card(self, parent):
-        """Xây dựng card kết nối (kênh, địa chỉ, chi tiết)"""
-        card, body = self._card(parent, "KẾT NỐI", "UART")
+        """Card kết nối: địa chỉ TCP, trạng thái, dò ESP, kết nối lại."""
+        card, body = self._card(parent, "KẾT NỐI", self.config.connection_detail)
         card.pack(fill="x", pady=(0, 10))
-        rows = (
-            ("Kênh", self.config.transport_label),
-            ("Địa chỉ", self.config.connection_label),
-            ("Chi tiết", self.config.connection_detail),
-        )
-        for row, (name, value) in enumerate(rows):
-            self._label(body, name, size=8, color=MUTED).grid(row=row, column=0, sticky="w", pady=3)
-            self._label(body, value, size=9, mono=True).grid(row=row, column=1, sticky="e", pady=3)
         body.grid_columnconfigure(1, weight=1)
+
+        self._label(body, "Kênh", size=8, color=MUTED).grid(row=0, column=0, sticky="w", pady=3)
+        self._label(body, self.config.transport_label, size=9, mono=True).grid(
+            row=0, column=1, sticky="e", pady=3
+        )
+
+        if self.config.transport == "tcp":
+            self.tcp_host_var = tk.StringVar(value=self.config.tcp_host)
+            self.tcp_port_var = tk.StringVar(value=str(self.config.tcp_port))
+            self._label(body, "Địa chỉ", size=8, color=MUTED).grid(
+                row=1, column=0, sticky="w", pady=3
+            )
+            target = tk.Frame(body, bg=CARD)
+            target.grid(row=1, column=1, sticky="e", pady=3)
+            ttk.Entry(
+                target, textvariable=self.tcp_host_var, width=13, style="Dark.TEntry"
+            ).pack(side="left")
+            self._label(target, ":", size=9, color=MUTED).pack(side="left", padx=2)
+            ttk.Entry(
+                target, textvariable=self.tcp_port_var, width=6, style="Dark.TEntry"
+            ).pack(side="left")
+            actions = tk.Frame(body, bg=CARD)
+            actions.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            self._button(
+                actions, "Dò ESP", self._discover_esp, size=8, padx=10, pady=4
+            ).pack(side="left")
+            self._button(
+                actions,
+                "Kết nối lại",
+                self._apply_endpoint,
+                kind="accent",
+                size=8,
+                padx=10,
+                pady=4,
+            ).pack(side="left", padx=(6, 0))
+        else:
+            self._label(body, "Địa chỉ", size=8, color=MUTED).grid(
+                row=1, column=0, sticky="w", pady=3
+            )
+            self._label(body, self.config.connection_label, size=9, mono=True).grid(
+                row=1, column=1, sticky="e", pady=3
+            )
+
+        self._label(body, "Trạng thái", size=8, color=MUTED).grid(
+            row=3, column=0, sticky="w", pady=3
+        )
+        self.conn_state_var = tk.StringVar(value="Đang khởi tạo...")
+        self._label(body, "", size=9, mono=True, textvariable=self.conn_state_var).grid(
+            row=3, column=1, sticky="e", pady=3
+        )
+        self._label(body, "Telemetry", size=8, color=MUTED).grid(
+            row=4, column=0, sticky="w", pady=3
+        )
+        self.conn_age_var = tk.StringVar(value="--")
+        self._label(body, "", size=9, mono=True, textvariable=self.conn_age_var).grid(
+            row=4, column=1, sticky="e", pady=3
+        )
+        self.conn_error_var = tk.StringVar(value="")
+        self._label(
+            body,
+            "",
+            size=8,
+            color=RED,
+            textvariable=self.conn_error_var,
+            wraplength=210,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+    def _discover_esp(self):
+        """Dò ESP8266 qua UDP discovery ở thread nền (không chặn GUI)."""
+        if self.config.transport != "tcp":
+            self._log("Dò ESP chỉ dùng cho kết nối TCP", "warn")
+            return
+        if self._discover_running:
+            return
+        self._discover_running = True
+        self.conn_state_var.set("Đang dò ESP...")
+        self._log("Dò ESP8266 qua UDP 8266...")
+        threading.Thread(target=self._discover_worker, name="discover", daemon=True).start()
+
+    def _discover_worker(self):
+        endpoint = discover()
+        self._discover_result = (endpoint,)
+        self._discover_running = False
+
+    def _on_discover_done(self, endpoint):
+        if endpoint is None:
+            self._log("Không tìm thấy ESP8266 (kiểm tra hotspot/nguồn ESP)", "error")
+            return
+        host, port = endpoint
+        self.tcp_host_var.set(host)
+        self.tcp_port_var.set(str(port))
+        self._log("Tìm thấy ESP tại %s:%d" % (host, port))
+        self._apply_endpoint()
+
+    def _apply_endpoint(self):
+        """Áp địa chỉ TCP đang nhập rồi buộc link kết nối lại."""
+        if self.config.transport != "tcp":
+            return
+        try:
+            host = self.tcp_host_var.get().strip()
+            port = int(self.tcp_port_var.get())
+        except (tk.TclError, ValueError):
+            self._log("Địa chỉ TCP không hợp lệ", "error")
+            return
+        if not host or not 1 <= port <= 65535:
+            self._log("Địa chỉ TCP không hợp lệ", "error")
+            return
+        if not self.link.set_endpoint(host, port):
+            self._log("Link hiện tại không hỗ trợ đổi địa chỉ", "error")
+            return
+        self.link.reconnect()
+        self._log("Kết nối lại tới %s:%d" % (host, port))
 
     def _build_motion_card(self, parent):
         """Xây dựng card chuyển động (tốc độ, xoay, phím tắt)"""
@@ -383,9 +523,10 @@ class RobotGUI(object):
             bd=0,
             sliderlength=18,
             width=12,
-            command=lambda value: self._update_motion_labels(),
+            command=self._on_scale_changed,
         )
         speed_scale.pack(fill="x", pady=(2, 10))
+        speed_scale.bind("<ButtonRelease-1>", self._on_scale_release)
 
         head = tk.Frame(body, bg=CARD)
         head.pack(fill="x")
@@ -410,9 +551,10 @@ class RobotGUI(object):
             bd=0,
             sliderlength=18,
             width=12,
-            command=lambda value: self._update_motion_labels(),
+            command=self._on_scale_changed,
         )
         turn_scale.pack(fill="x", pady=(2, 10))
+        turn_scale.bind("<ButtonRelease-1>", self._on_scale_release)
 
         presets = tk.Frame(body, bg=CARD)
         presets.pack(fill="x")
@@ -421,7 +563,7 @@ class RobotGUI(object):
             self._button(
                 presets,
                 "%.1f" % value,
-                command=lambda v=value: self.speed_var.set(v),
+                command=lambda v=value: self._set_speed_preset(v),
                 size=8,
                 padx=8,
                 pady=3,
@@ -726,12 +868,134 @@ class RobotGUI(object):
             pady=5,
         ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
+    def _build_pulse_tab(self, parent):
+        """Tab phát xung bậc thang/xung vuông để đo đáp ứng PID."""
+        self.pulse_wheel_var = tk.StringVar(value="Cả 4")
+        self.pulse_shape_var = tk.StringVar(value="Bậc thang")
+        self.pulse_amp_var = tk.DoubleVar(value=100.0)
+        self.pulse_width_var = tk.DoubleVar(value=800.0)
+        self.pulse_period_var = tk.DoubleVar(value=1600.0)
+        self.pulse_count_var = tk.IntVar(value=1)
+        self.pulse_status_var = tk.StringVar(value="Sẵn sàng")
+        self.pulse_live_var = tk.StringVar(value="Thực (RPM): --")
+        self.pulse_metrics_var = tk.StringVar(value="Chưa có dữ liệu")
+
+        card, body = self._card(parent, "XUNG ĐẦU VÀO", "kích đáp ứng PID")
+        card.pack(fill="x", pady=(0, 10))
+
+        self._label(body, "Bánh", size=8, color=MUTED).grid(row=0, column=0, sticky="w", pady=3)
+        ttk.Combobox(
+            body,
+            values=("Cả 4", "Bánh 1", "Bánh 2", "Bánh 3", "Bánh 4"),
+            textvariable=self.pulse_wheel_var,
+            state="readonly",
+            width=9,
+            style="Dark.TCombobox",
+        ).grid(row=0, column=1, sticky="w", padx=(6, 14), pady=3)
+        self._label(body, "Dạng", size=8, color=MUTED).grid(row=0, column=2, sticky="w", pady=3)
+        ttk.Combobox(
+            body,
+            values=("Bậc thang", "Xung vuông"),
+            textvariable=self.pulse_shape_var,
+            state="readonly",
+            width=11,
+            style="Dark.TCombobox",
+        ).grid(row=0, column=3, sticky="w", padx=(6, 0), pady=3)
+
+        fields = (
+            ("Biên độ (RPM)", self.pulse_amp_var, -self.config.max_wheel_rpm, self.config.max_wheel_rpm, 10.0, 0, 0),
+            ("Độ rộng ON (ms)", self.pulse_width_var, 10.0, 60000.0, 50.0, 0, 2),
+            ("Chu kỳ (ms)", self.pulse_period_var, 20.0, 60000.0, 100.0, 1, 0),
+            ("Số xung", self.pulse_count_var, 1, 1000, 1, 1, 2),
+        )
+        for name, variable, low, high, step, row, column in fields:
+            self._label(body, name, size=8, color=MUTED).grid(
+                row=row + 1, column=column, sticky="w", pady=3
+            )
+            ttk.Spinbox(
+                body,
+                from_=low,
+                to=high,
+                increment=step,
+                textvariable=variable,
+                width=10,
+                style="Dark.TSpinbox",
+            ).grid(row=row + 1, column=column + 1, sticky="w", padx=(6, 14), pady=3)
+
+        actions = tk.Frame(body, bg=CARD)
+        actions.grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        self._button(
+            actions, "Bắt đầu", self._pulse_start, kind="accent", size=9, padx=12, pady=5
+        ).pack(side="left")
+        self._button(
+            actions, "Dừng", self._pulse_stop, kind="danger", size=9, padx=12, pady=5
+        ).pack(side="left", padx=(6, 0))
+
+        self._label(
+            body,
+            "Bậc thang: ON = độ rộng, OFF = độ rộng. Vuông: OFF = chu kỳ - độ rộng.\n"
+            "WASD / RPM trực tiếp / PWM / E-STOP / ẩn cửa sổ đều dừng xung.",
+            size=8,
+            color=DIM,
+            justify="left",
+        ).grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+
+        status_card, status_body = self._card(parent, "TRẠNG THÁI XUNG", "10 ms")
+        status_card.pack(fill="x")
+        self._label(
+            status_body, "", size=9, mono=True, textvariable=self.pulse_status_var
+        ).pack(anchor="w")
+        self._label(
+            status_body, "", size=8, mono=True, color=MUTED, textvariable=self.pulse_live_var
+        ).pack(anchor="w", pady=(6, 0))
+        self._label(
+            status_body, "", size=8, mono=True, color=TEXT, textvariable=self.pulse_metrics_var
+        ).pack(anchor="w", pady=(6, 0))
+        self._button(
+            status_body, "Xuất CSV xung", self._export_pulse_csv, size=8, padx=10, pady=4
+        ).pack(anchor="w", pady=(8, 0))
+        self._label(
+            status_body,
+            "Biên độ dương = tiến, âm = lùi. Xem đáp ứng trên biểu đồ RPM.",
+            size=8,
+            color=DIM,
+        ).pack(anchor="w", pady=(8, 0))
+
     def _build_log_tab(self, parent):
-        """Xây dựng tab nhật ký (log)"""
+        """Tab nhật ký: lọc mức, tự cuộn, copy, xuất CSV telemetry."""
         toolbar = tk.Frame(parent, bg=BG)
-        toolbar.pack(fill="x", pady=(0, 8))
+        toolbar.pack(fill="x", pady=(0, 6))
         self._label(toolbar, "SỰ KIỆN", size=9, bold=True, bg=BG).pack(side="left")
         self._button(toolbar, "Xóa", self._clear_log, size=8, padx=10, pady=3).pack(side="right")
+        self._button(toolbar, "Copy", self._copy_log, size=8, padx=10, pady=3).pack(
+            side="right", padx=(0, 6)
+        )
+
+        toolbar2 = tk.Frame(parent, bg=BG)
+        toolbar2.pack(fill="x", pady=(0, 8))
+        self._label(toolbar2, "Mức", size=8, color=MUTED).pack(side="left")
+        ttk.Combobox(
+            toolbar2,
+            values=("Tất cả", "Info", "Cảnh báo", "Lỗi"),
+            textvariable=self._log_filter_var,
+            state="readonly",
+            width=9,
+            style="Dark.TCombobox",
+        ).pack(side="left", padx=(6, 10))
+        self._log_filter_var.trace_add("write", lambda *_: self._render_log())
+        tk.Checkbutton(
+            toolbar2,
+            text="Tự cuộn",
+            variable=self._log_follow_var,
+            bg=BG,
+            fg=TEXT,
+            activebackground=BG,
+            selectcolor=INPUT,
+            font=(self.font_family, 8),
+        ).pack(side="left")
+        self._button(
+            toolbar2, "CSV telemetry", self._export_telemetry_csv, size=8, padx=10, pady=3
+        ).pack(side="right")
 
         frame = tk.Frame(parent, bg=BG)
         frame.pack(fill="both", expand=True)
@@ -751,6 +1015,7 @@ class RobotGUI(object):
             padx=8,
             pady=8,
             state="disabled",
+            takefocus=0,
         )
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scroll.set)
@@ -768,7 +1033,7 @@ class RobotGUI(object):
         footer.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 10))
         self._label(
             footer,
-            "Lệnh 20 Hz  ·  Telemetry 50 Hz  ·  Timeout 500 ms",
+            "Lệnh 50 Hz  ·  Telemetry 50 Hz  ·  Timeout 500 ms",
             size=8,
             color=DIM,
             bg=BG,
@@ -776,40 +1041,75 @@ class RobotGUI(object):
         self.footer_var = tk.StringVar(value=self.config.connection_label)
         self._label(footer, "", size=8, color=MUTED, bg=BG, textvariable=self.footer_var).pack(side="right")
 
+    def _on_scale_changed(self, _value):
+        """Kéo slider tốc độ/xoay: cập nhật nhãn và áp vận tốc mới ngay."""
+        self._update_motion_labels()
+        if self.directions:
+            self._recompute()
+
+    def _on_scale_release(self, _event):
+        """Trả focus về cửa sổ chính sau khi kéo slider để phím WASD hoạt động lại."""
+        self.root.focus_set()
+
+    def _set_speed_preset(self, value):
+        """Đặt tốc độ từ nút preset và cập nhật nhãn hiển thị."""
+        self.speed_var.set(value)
+        self._update_motion_labels()
+        if self.directions:
+            self._recompute()
+
     def _bind_keys(self):
-        """Bind phím tắt (W/A/S/D/Q/E/Space)"""
-        self.root.bind("<KeyPress>", self._on_key_press)
-        self.root.bind("<KeyRelease>", self._on_key_release)
+        """Bind phím tắt (W/A/S/D/Q/E/Space).
+
+        bind_all để phím luôn hoạt động dù focus ở widget con (nút, slider,
+        log, Spinbox...). Các ô nhập đều là số nên W/A/S/D/Q/E không xung đột."""
+        self.root.bind_all("<KeyPress>", self._on_key_press)
+        self.root.bind_all("<KeyRelease>", self._on_key_release)
         self.root.bind("<FocusOut>", self._on_focus_out)
-        self.root.bind("<Unmap>", self._on_focus_out)
+        self.root.bind("<Unmap>", self._on_unmap)
 
     def _on_focus_out(self, _event):
-        """Cửa sổ mất focus/bị ẩn: xóa mọi hướng đang giữ để robot không chạy mãi."""
+        """Cửa sổ mất focus: xóa mọi hướng đang giữ để robot không chạy mãi."""
         if self.directions:
             self.directions.clear()
             self._recompute()
 
+    def _on_unmap(self, event):
+        """Cửa sổ bị ẩn/thu nhỏ: dừng cả chuyển động và xung."""
+        self._on_focus_out(event)
+        self._pulse_stop(status="Tạm dừng (cửa sổ ẩn)")
+
+    def _direction_for(self, event):
+        """Lấy hướng từ sự kiện phím.
+
+        Dùng keysym (không phụ thuộc Caps Lock/IME/bố cục bàn phím) và chỉ
+        fallback sang event.char khi keysym không khớp."""
+        direction = DIRECTION_KEYS.get(event.keysym.lower())
+        if direction is None and event.char:
+            direction = DIRECTION_KEYS.get(event.char.lower())
+        return direction
+
     def _on_key_press(self, event):
         """Xử lý phím nhấn: space = E-STOP, W/A/S/D/Q/E = chuyển động"""
-        if isinstance(event.widget, (tk.Entry, ttk.Entry, ttk.Spinbox, tk.Text, tk.Scale)):
-            return
-        if event.keysym == "space":
+        if event.keysym.lower() == "space":
             self._emergency_stop()
             return
-        direction = DIRECTION_KEYS.get(event.char)
+        direction = self._direction_for(event)
         if direction:
+            self._pulse_stop(status="Đã dừng (điều khiển tay)")
             self.directions.add(direction)
             self._recompute()
 
     def _on_key_release(self, event):
         """Xử lý phím thả: cập nhật directions"""
-        direction = DIRECTION_KEYS.get(event.char)
+        direction = self._direction_for(event)
         if direction:
             self.directions.discard(direction)
             self._recompute()
 
     def _press(self, name):
         """Thêm direction vào set và recompute velocity"""
+        self._pulse_stop(status="Đã dừng (điều khiển tay)")
         self.directions.add(name)
         self._recompute()
 
@@ -850,10 +1150,164 @@ class RobotGUI(object):
         self.link.set_velocity(vx * scale, vy * scale, omega)
 
     def _emergency_stop(self):
-        """E-STOP: gửi STOP, clear directions, log warning"""
+        """E-STOP: gửi STOP, clear directions, dừng xung, log warning"""
         self.directions.clear()
+        self._pulse_stop(send_stop=False)
         self.link.stop()
         self._log("STOP khẩn cấp đã gửi", "warn")
+
+    def _pulse_wheels(self):
+        """Danh sách chỉ số bánh (0..3) đang chọn cho xung."""
+        selection = self.pulse_wheel_var.get()
+        if selection.startswith("Cả"):
+            return [0, 1, 2, 3]
+        try:
+            return [int(selection.rsplit(" ", 1)[-1]) - 1]
+        except (ValueError, IndexError):
+            return [0]
+
+    def _pulse_build_plan(self):
+        """Tạo danh sách (rpm, thời lượng_s) cho các pha ON/OFF."""
+        return build_plan(
+            self.pulse_amp_var.get(),
+            self.pulse_width_var.get(),
+            self.pulse_period_var.get(),
+            self.pulse_count_var.get(),
+            self.pulse_shape_var.get().startswith("Vuông"),
+            self.config.max_wheel_rpm,
+        )
+
+    def _pulse_apply(self, amplitude):
+        """Đặt RPM cho các bánh đã chọn, các bánh khác = 0."""
+        rpms = [0.0, 0.0, 0.0, 0.0]
+        for index in self._pulse_wheels():
+            rpms[index] = amplitude
+        self.link.set_rpm(*rpms)
+
+    def _pulse_start(self):
+        """Bắt đầu phát chuỗi xung theo cấu hình."""
+        if self._pulse_active:
+            return
+        if not self.simulated and not self.link.snapshot()["connected"]:
+            self.pulse_status_var.set("Chưa kết nối")
+            self._log("Chưa kết nối, không phát xung", "error")
+            return
+        try:
+            plan = self._pulse_build_plan()
+        except (ValueError, tk.TclError) as exc:
+            self.pulse_status_var.set("Lỗi: %s" % exc)
+            self._log("Xung: %s" % exc, "error")
+            return
+        self._pulse_plan = plan
+        self._pulse_index = 0
+        self._pulse_active = True
+        self._pulse_phase_started = time.monotonic()
+        self._pulse_samples = []
+        self._pulse_on_start = self._pulse_phase_started
+        self._pulse_on_duration = plan[0][1]
+        self._pulse_amplitude = plan[0][0]
+        self._pulse_metrics = None
+        self.pulse_metrics_var.set("Đang đo đáp ứng...")
+        self._pulse_apply(plan[0][0])
+        total = len(plan) // 2
+        self.pulse_status_var.set("Đang chạy xung 1/%d · ON" % total)
+        self._log(
+            "Bắt đầu %d xung %s, biên độ %.1f RPM"
+            % (total, self.pulse_shape_var.get().lower(), float(self.pulse_amp_var.get()))
+        )
+        if self._pulse_after_id is not None:
+            try:
+                self.root.after_cancel(self._pulse_after_id)
+            except tk.TclError:
+                pass
+        self._pulse_after_id = self.root.after(10, self._pulse_tick)
+
+    def _pulse_tick(self):
+        """Chuyển pha ON/OFF theo đồng hồ monotonic."""
+        self._pulse_after_id = None
+        if not self._pulse_active:
+            return
+        now = time.monotonic()
+        duration = self._pulse_plan[self._pulse_index][1]
+        if now - self._pulse_phase_started >= duration:
+            self._pulse_index += 1
+            if self._pulse_index >= len(self._pulse_plan):
+                self._pulse_finish()
+                return
+            self._pulse_phase_started = now
+            amplitude = self._pulse_plan[self._pulse_index][0]
+            self._pulse_apply(amplitude)
+            total = len(self._pulse_plan) // 2
+            phase = "ON" if amplitude != 0.0 else "OFF"
+            self.pulse_status_var.set(
+                "Đang chạy xung %d/%d · %s" % (self._pulse_index // 2 + 1, total, phase)
+            )
+        self._pulse_after_id = self.root.after(10, self._pulse_tick)
+
+    def _pulse_finish(self):
+        """Kết thúc chuỗi xung: đưa RPM về 0 và gửi STOP."""
+        total = len(self._pulse_plan) // 2
+        self._pulse_update_metrics()
+        self._pulse_active = False
+        self._pulse_after_id = None
+        self._pulse_apply(0.0)
+        self.link.stop()
+        self.pulse_status_var.set("Hoàn tất %d xung" % total)
+        self._log("Xung hoàn tất (%d xung)" % total)
+
+    def _pulse_stop(self, status="Đã dừng", send_stop=True):
+        """Dừng xung hiện tại (nếu có) và tùy chọn gửi STOP."""
+        was_active = self._pulse_active
+        self._pulse_active = False
+        if self._pulse_after_id is not None:
+            try:
+                self.root.after_cancel(self._pulse_after_id)
+            except tk.TclError:
+                pass
+            self._pulse_after_id = None
+        if send_stop and was_active:
+            self.link.stop()
+        if was_active:
+            self._pulse_update_metrics()
+            self.pulse_status_var.set(status)
+            self._log("Dừng xung", "warn")
+
+    def _pulse_update_metrics(self):
+        """Tính rise/overshoot/settle/SSE từ các mẫu của pha ON đầu tiên."""
+        metrics = analyze_step(self._pulse_samples, self._pulse_amplitude, self._pulse_on_duration)
+        self._pulse_metrics = metrics
+        if not self._pulse_samples:
+            self.pulse_metrics_var.set("Chưa có dữ liệu")
+            return
+        if metrics is None:
+            self.pulse_metrics_var.set("Không đủ mẫu để phân tích")
+            return
+        rise = (
+            "--"
+            if metrics["rise_time_ms"] is None
+            else "%.0f ms" % metrics["rise_time_ms"]
+        )
+        self.pulse_metrics_var.set(
+            "Rise %s · Overshoot %.1f%% · Settle %.0f ms\nSSE %+.1f RPM · Peak %+.1f RPM"
+            % (
+                rise,
+                metrics["overshoot_pct"],
+                metrics["settling_time_ms"],
+                metrics["steady_error_rpm"],
+                metrics["peak_rpm"],
+            )
+        )
+
+    def _update_pulse_live(self, telemetry):
+        """Cập nhật RPM thực của các bánh đang chọn trên tab XUNG."""
+        if telemetry is None:
+            self.pulse_live_var.set("Thực (RPM): --")
+            return
+        parts = [
+            "B%d %+.1f" % (index + 1, telemetry.rpm_actual[index])
+            for index in self._pulse_wheels()
+        ]
+        self.pulse_live_var.set("Thực (RPM): " + " · ".join(parts))
 
     def _apply_rpm(self):
         """Áp dụng RPM từ input fields"""
@@ -862,6 +1316,7 @@ class RobotGUI(object):
         except (tk.TclError, ValueError):
             self._log("Giá trị RPM không hợp lệ", "error")
             return
+        self._pulse_stop(status="Đã dừng (RPM trực tiếp)")
         self.link.set_rpm(*rpms)
         self._log("RPM đặt: %.1f, %.1f, %.1f, %.1f" % tuple(rpms))
 
@@ -882,6 +1337,7 @@ class RobotGUI(object):
         if index < 1 or index > 4:
             self._log("Kênh PWM phải nằm trong 1..4", "error")
             return
+        self._pulse_stop(status="Đã dừng (PWM thủ công)")
         self.link.set_manual(index, duty)
         self._log("PWM bánh %d, duty %.3f" % (index, duty), "warn")
 
@@ -921,20 +1377,107 @@ class RobotGUI(object):
         self.link.set_deadzone(index, value)
         self._log("Dead-zone bánh %d = %.3f" % (index, value))
 
-    def _log(self, message, level="info"):
-        """Ghi log vào text widget"""
-        stamp = time.strftime("%H:%M:%S")
+    _LOG_LEVELS = {"Info": "info", "Cảnh báo": "warn", "Lỗi": "error"}
+
+    def _log_matches(self, level):
+        selected = self._log_filter_var.get()
+        if selected == "Tất cả":
+            return True
+        return self._LOG_LEVELS.get(selected) == level
+
+    def _append_log_text(self, stamp, message, level):
         self.log_text.configure(state="normal")
         self.log_text.insert("end", "[%s] " % stamp, "time")
         self.log_text.insert("end", message + "\n", level)
-        self.log_text.see("end")
+        if self._log_follow_var.get():
+            self.log_text.see("end")
         self.log_text.configure(state="disabled")
 
-    def _clear_log(self):
-        """Xóa log"""
+    def _log(self, message, level="info"):
+        """Ghi log và lưu lịch sử để lọc/copy/xuất."""
+        entry = (time.strftime("%H:%M:%S"), message, level)
+        self._log_entries.append(entry)
+        if self._log_matches(level):
+            self._append_log_text(*entry)
+
+    def _render_log(self):
+        """Vẽ lại log theo bộ lọc mức hiện tại."""
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", "end")
         self.log_text.configure(state="disabled")
+        for entry in self._log_entries:
+            if self._log_matches(entry[2]):
+                self._append_log_text(*entry)
+
+    def _clear_log(self):
+        """Xóa toàn bộ log."""
+        self._log_entries.clear()
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.configure(state="disabled")
+
+    def _copy_log(self):
+        """Copy nội dung log đang hiển thị vào clipboard."""
+        text = self.log_text.get("1.0", "end-1c")
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self._log("Đã copy %d dòng log" % len(self._log_entries))
+
+    def _export_telemetry_csv(self):
+        """Xuất toàn bộ telemetry đã nhận ra file CSV."""
+        if not self._telemetry_log:
+            self._log("Chưa có telemetry để xuất", "warn")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Lưu telemetry",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv")],
+            initialfile="telemetry.csv",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(
+                    ["t_ms"]
+                    + ["rpm%d_actual" % (index + 1) for index in range(4)]
+                    + ["rpm%d_setpoint" % (index + 1) for index in range(4)]
+                )
+                for t_ms, actual, setpoint in list(self._telemetry_log):
+                    writer.writerow(
+                        [t_ms]
+                        + ["%.3f" % value for value in actual]
+                        + ["%.3f" % value for value in setpoint]
+                    )
+        except OSError as exc:
+            self._log("Không ghi được CSV: %s" % exc, "error")
+            return
+        self._log("Đã lưu %s (%d mẫu)" % (path, len(self._telemetry_log)))
+
+    def _export_pulse_csv(self):
+        """Xuất mẫu đáp ứng của xung gần nhất ra CSV."""
+        if not self._pulse_samples:
+            self._log("Chưa có mẫu xung để xuất", "warn")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Lưu đáp ứng xung",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv")],
+            initialfile="pulse_response.csv",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["t_s", "rpm_actual", "rpm_target"])
+                for t_value, rpm in self._pulse_samples:
+                    writer.writerow(["%.4f" % t_value, "%.3f" % rpm, "%.3f" % self._pulse_amplitude])
+        except OSError as exc:
+            self._log("Không ghi được CSV: %s" % exc, "error")
+            return
+        self._log("Đã lưu %s (%d mẫu)" % (path, len(self._pulse_samples)))
 
     def _draw_wheel_bar(self, index, actual, setpoint):
         """Vẽ thanh RPM cho bánh index"""
@@ -1030,6 +1573,10 @@ class RobotGUI(object):
         telemetry = snapshot["telemetry"]
         fresh = self.link.telemetry_fresh()
 
+        if self._discover_result is not None:
+            result, self._discover_result = self._discover_result, None
+            self._on_discover_done(result[0])
+
         if snapshot["connected"] and fresh:
             status = "MÔ PHỎNG" if self.simulated else "ĐÃ KẾT NỐI"
             color = YELLOW if self.simulated else GREEN
@@ -1058,7 +1605,14 @@ class RobotGUI(object):
         else:
             self.age_var.set("telemetry --")
 
+        self.conn_state_var.set(status)
+        if snapshot["age_s"] is not None:
+            self.conn_age_var.set("%.0f ms" % (snapshot["age_s"] * 1000.0))
+        else:
+            self.conn_age_var.set("--")
+
         error = snapshot["error"]
+        self.conn_error_var.set(error[:120])
         if error and error != self._last_error:
             self._log(error, "error")
         self._last_error = error
@@ -1086,12 +1640,22 @@ class RobotGUI(object):
                 self._draw_wheel_bar(index, actual[index], setpoint[index])
             if telemetry.t_ms != self._last_telemetry_t:
                 self.history.append(tuple(actual))
+                self._telemetry_log.append(
+                    (telemetry.t_ms, tuple(actual), tuple(setpoint))
+                )
                 self._last_telemetry_t = telemetry.t_ms
+            if self._pulse_active:
+                elapsed = time.monotonic() - self._pulse_on_start
+                if elapsed <= self._pulse_on_duration + 0.05:
+                    index = self._pulse_wheels()[0]
+                    self._pulse_samples.append((elapsed, actual[index]))
         else:
             for index in range(4):
                 self.rpm_labels[index].configure(text="--")
                 self.sp_labels[index].configure(text="SP --")
                 self._draw_wheel_bar(index, None, None)
+
+        self._update_pulse_live(telemetry)
 
         self._draw_chart()
         self._update_motion_labels()
@@ -1110,7 +1674,8 @@ class RobotGUI(object):
         self.root.after(50, self._tick)
 
     def _on_close(self):
-        """Đóng cửa sổ GUI"""
+        """Đóng cửa sổ GUI: dừng xung và gửi STOP trước khi thoát."""
+        self._pulse_stop(send_stop=True)
         self.root.destroy()
 
     def run(self):

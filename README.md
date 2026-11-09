@@ -62,8 +62,16 @@ pip install -r requirements-dev.txt
 python3 main.py --sim
 ```
 
-Phím tắt: `W/S` tiến-lùi, `A/D` đi ngang, `Q/E` xoay, `Space` dừng khẩn cấp.
+Phím tắt: `W/S` tiến-lùi, `A/D` đi ngang, `Q/E` xoay, `Space` dừng khẩn cấp
+(phím hoạt động cả khi focus ở slider/ô nhập; có Caps Lock/IME cũng nhận).
 Tab **RPM trực tiếp** gửi 4 RPM riêng và chỉnh PID online.
+Tab **XUNG** phát xung bậc thang/xung vuông (biên độ, độ rộng, chu kỳ, số xung)
+cho một bánh hoặc cả 4 để đo đáp ứng PID realtime; tự dừng khi WASD/E-STOP/ẩn cửa sổ.
+Sau mỗi lần chạy, tab XUNG hiện **rise time / overshoot / settling / sai số xác lập**
+của pha ON đầu tiên và cho xuất CSV mẫu đáp ứng.
+Card **KẾT NỐI** có ô IP/port, nút **Dò ESP** (UDP broadcast) và **Kết nối lại** ngay
+trong app. Tab **NHẬT KÝ** lọc theo mức (Info/Cảnh báo/Lỗi), tự cuộn, copy và xuất
+toàn bộ telemetry ra CSV.
 
 ### 2. Host với robot thật
 
@@ -78,7 +86,8 @@ python3 main.py --port /dev/ttyUSB0
 Qua WiFi (ESP8266 cầu nối trong suốt):
 
 ```bash
-python3 main.py --tcp 192.168.4.1:8080
+python3 main.py --discover                # tự dò ESP qua UDP broadcast (khuyến nghị)
+python3 main.py --tcp 172.20.10.10:8080   # hoặc dùng IP cố định do hotspot cấp
 ```
 
 Linux cần quyền cổng serial nếu dùng USB-UART:
@@ -87,8 +96,10 @@ Linux cần quyền cổng serial nếu dùng USB-UART:
 sudo usermod -aG dialout $USER
 ```
 
-Nếu robot đi ngang ngược chiều, thêm `--invert-vy`; nếu xoay ngược chiều, thêm `--invert-omega`.
+Nếu robot đi ngang ngược chiều, thêm `--invert-vy`; nếu xoay ngược chiều, thêm `--invert-omega`
+(host tự tính động học nghịch và gửi RPM nên các cờ này có hiệu lực ngay, không cần nạp lại firmware).
 Sau khi đo hình học thật, truyền `--wheelbase`, `--track`, `--wheel-radius` (mét).
+Nếu một bánh quay ngược chiều tiến (đấu dây motor/encoder), xem mục "Đảo chiều bánh" trong [firmware/README.md](firmware/README.md).
 Cấu hình ESP8266: [docs/esp8266.md](docs/esp8266.md).
 
 ### 3. Nạp firmware
@@ -97,10 +108,10 @@ Cấu hình ESP8266: [docs/esp8266.md](docs/esp8266.md).
 cd firmware
 pio run
 pio run -t upload
-pio device monitor -b 115200
 ```
 
 Dùng ST-Link. Nếu dùng USB-UART bootloader, đổi `upload_protocol` trong `platformio.ini`.
+Telemetry của STM32 đi qua USART2 (PA2/PA3) tới ESP8266/USB-UART, không qua USB của Blue Pill.
 
 ### 4. Kiểm thử
 
@@ -113,9 +124,10 @@ python3 -m pytest -q
 
 NodeMCU V3 (ESP8266) chạy như cầu nối trong suốt: nhận byte TCP từ laptop và chuyển nguyên văn xuống UART2 của STM32, theo chiều ngược lại cho telemetry. Firmware có sẵn tại `esp8266/src/main.cpp` (PlatformIO, `env:nodemcuv2`).
 
-- ESP phát AP SSID `MecanumRobot`, mật khẩu `12345678`, IP `192.168.4.1`, TCP server cổng `8080`. SSID/mật khẩu này chỉ dùng cho demo; đổi trước khi triển khai.
-- Mặc định host kết nối `192.168.4.1:8080`: `python3 main.py --tcp`.
-- Có thể chỉ định địa chỉ: `python3 main.py --tcp 192.168.1.50:8080`.
+- ESP chạy **STA**, tự kết nối hotspot WiFi cấu hình trong `esp8266/src/secrets.h` (xem `secrets.example.h`); TCP server cổng `8080`.
+- IP do hotspot cấp DHCP (ví dụ `172.20.10.10`) và **có thể đổi sau mỗi lần ESP khởi động lại**. Dùng `python3 main.py --discover` để tự dò (ESP trả lời UDP cổng 8266), hoặc `python3 main.py --tcp <IP_ESP>:8080`; ESP cũng quảng bá mDNS `robot.local`.
+- Khi mất kết nối TCP, host tự xóa vận tốc đích và gửi `STOP` trước khi phát lại lệnh sau khi nối lại.
+- Sau khi kết nối TCP, ESP gửi log khởi động (IP, WiFi) trước telemetry; USB không còn log sau `Serial.swap()`.
 - Nếu dùng USB-UART có dây, giữ `--port /dev/ttyUSB0`.
 - Nạp: `pio run -d esp8266 -t upload`.
 - Hướng dẫn nạp và cấu hình ESP: [docs/esp8266.md](docs/esp8266.md).
