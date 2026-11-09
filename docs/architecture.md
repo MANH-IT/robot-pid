@@ -17,7 +17,7 @@
                                │ UART2 115200 8N1
                                │ TX/RX dạng text, newline
 ┌──────────────────────────────┴─────────────────────────────┐
-│ CẤP THẤP: STM32F103C8T6 @ 72 MHz                           │
+│ CẤP THẤP: STM32F103C8T6 @ 64 MHz (HSI)                     │
 │  - TIM2/TIM4 encoder mode cho bánh 1 & 3 (x4)               │
 │  - EXTI10/EXTI8 + giải mã mềm cho bánh 2 & 4 (x2)           │
 │  - Đo RPM mỗi 10 ms                                         │
@@ -99,13 +99,13 @@ Mỗi bánh có một `PidController`:
 - `I` có điều kiện: chỉ tích phân khi đầu ra chưa bão hòa hoặc sai lệch đang kéo đầu ra ra khỏi bão hòa (anti-windup). `I` bị kẹp trong `[-0.5, 0.5]`.
 - `D` tính trên tốc độ đo: `D = -Kd·d(RPM_actual)/dt`, có lọc thông thấp alpha = 0.30 để giảm nhiễu lượng tử encoder.
 - Bù dead-zone: cộng `Dz` cùng dấu với setpoint khi đầu ra cùng dấu, giúp động cơ vượt ma sát tĩnh.
-- Đầu ra chuẩn hóa `[-1, 1]`, sau đó map sang compare `0..3599` của timer.
+- Đầu ra chuẩn hóa `[-1, 1]`, sau đó map sang compare `0..3199` của timer.
 
 Thông số mặc định trong `robot_config.h` chỉ để khởi động: `Kp = 0.0035`, `Ki = 0.015`, `Kd = 0.00015`, dead-zone `0.08`, `MAX_WHEEL_RPM = 333`. Bắt buộc hiệu chuẩn trên robot thật.
 
 ## 6. PWM và driver
 
-- Timer clock 72 MHz, `ARR = 3599`, prescaler 0 → PWM 20 kHz.
+- Timer clock 64 MHz (HSI / PLL ×16), `ARR = 3199`, prescaler 0 → PWM 20 kHz.
 - **BTS7960 (IBT-2):** mỗi bánh cần 2 kênh PWM riêng (RPWM và LPWM). Firmware hiện tại xuất **8 kênh**:
   - RPWM bánh 1–4: PA8, PA9, PA10, PA11 (TIM1_CH1–CH4)
   - LPWM bánh 1–4: PA6, PA7, PB0, PB1 (TIM3_CH1–CH4)

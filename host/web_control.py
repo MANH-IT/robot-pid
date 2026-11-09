@@ -15,6 +15,11 @@ from urllib.parse import urlparse, parse_qs
 ESP_HOST = os.environ.get("ROBOT_ESP_HOST", "172.20.10.10")
 ESP_PORT = int(os.environ.get("ROBOT_ESP_PORT", "8080"))
 
+# Token tuỳ chọn: nếu đặt ROBOT_WEB_TOKEN, mọi yêu cầu /cmd và trang chủ phải
+# kèm query ?token=<giá trị>. Không đặt = truy cập mở trong LAN (bất kỳ ai
+# trong hotspot cũng điều khiển được robot).
+WEB_TOKEN = os.environ.get("ROBOT_WEB_TOKEN", "").strip()
+
 # Giữ một socket TCP duy nhất tới ESP (tránh mở/đóng liên tục mỗi lệnh)
 _robot_socket = None
 _robot_lock = threading.Lock()
@@ -55,9 +60,10 @@ HTML_PAGE = """<!DOCTYPE html>
         // ESP tự dừng robot sau 500 ms nếu không nhận lệnh -> lặp lệnh khi giữ nút.
         const REPEAT_MS = 100;
         let repeatTimer = null;
+        const token = new URLSearchParams(window.location.search).get('token') || '';
 
         function sendCmd(cmd) {
-            fetch('/cmd?c=' + encodeURIComponent(cmd))
+            fetch('/cmd?c=' + encodeURIComponent(cmd) + '&token=' + encodeURIComponent(token))
                 .then(r => r.ok ? r.text() : Promise.reject(r.statusText))
                 .then(() => { document.getElementById('status').innerText = 'OK: ' + cmd; })
                 .catch(e => { document.getElementById('status').innerText = 'Lỗi: ' + e; });
@@ -123,8 +129,20 @@ def robot_send(cmd):
 
 
 class RobotWebHandler(BaseHTTPRequestHandler):
+    def _token_ok(self, parsed):
+        """Trả True nếu không đặt ROBOT_WEB_TOKEN hoặc token khớp."""
+        if not WEB_TOKEN:
+            return True
+        params = parse_qs(parsed.query)
+        return params.get("token", [""])[0] == WEB_TOKEN
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if not self._token_ok(parsed):
+            self.send_response(401)
+            self.end_headers()
+            self.wfile.write(b"Unauthorized: them ?token=<ROBOT_WEB_TOKEN>")
+            return
         if parsed.path == "/":
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
@@ -175,6 +193,9 @@ def main():
     print("Web server: http://localhost:%d" % args.listen)
     print("ESP8266   : %s:%d" % (ESP_HOST, ESP_PORT))
     print("Trên điện thoại: http://<IP_máy_tính>:%d" % args.listen)
+    if not WEB_TOKEN:
+        print("Cảnh báo: chưa đặt ROBOT_WEB_TOKEN → bất kỳ ai trong hotspot đều điều khiển được robot.")
+        print("          Đặt ROBOT_WEB_TOKEN=<chuỗi bí mật> rồi truy cập http://<IP>:8000/?token=<chuỗi bí mật>")
     server = HTTPServer(("0.0.0.0", args.listen), RobotWebHandler)
     try:
         server.serve_forever()

@@ -18,7 +18,6 @@ static char line_buffer[PROTOCOL_LINE_MAX];
 static uint16_t line_length;
 static uint8_t line_overflow;
 
-static volatile uint8_t tx_busy;
 static char tx_buffer[TX_BUFFER_SIZE];
 
 static uint32_t last_rx_ms;
@@ -84,23 +83,29 @@ static int values_are_sane(const float *values, int count)
 }
 
 /* Gửi text qua UART:
- * - tx_busy: flag đang gửi
- * - tx_buffer: buffer TX
- * - HAL_UART_Transmit_IT: gửi async */
+ * - Poll cờ TXE rồi ghi DR trực tiếp (không dùng HAL_UART_Transmit_IT).
+ *   Cách này tránh kẹt cờ tx_busy khi callback TX complete bị lỡ
+ *   (RX đọc DR đồng thời với ISR TX có thể làm HAL state machine treo).
+ * - Timeout 10 ms mỗi byte; hết thời gian thì thoát im lặng. */
 static void send_text(const char *text)
 {
-    size_t length;
-    if (tx_busy) {
-        return;
-    }
-    length = strlen(text);
+    size_t length = strlen(text);
+    size_t i;
+    uint32_t start;
+
     if (length == 0u || length >= TX_BUFFER_SIZE) {
         return;
     }
     memcpy(tx_buffer, text, length);
-    tx_busy = 1u;
-    if (HAL_UART_Transmit_IT(&huart2, (uint8_t *)tx_buffer, (uint16_t)length) != HAL_OK) {
-        tx_busy = 0u;
+
+    for (i = 0u; i < length; i++) {
+        start = HAL_GetTick();
+        while (!__HAL_UART_GET_FLAG(&huart2, UART_FLAG_TXE)) {
+            if ((uint32_t)(HAL_GetTick() - start) > 10u) {
+                return;
+            }
+        }
+        huart2.Instance->DR = (uint8_t)tx_buffer[i];
     }
 }
 
@@ -197,7 +202,6 @@ static void handle_line(char *line)
 /* Khởi tạo protocol:
  * - Reset ring buffer
  * - Reset line buffer
- * - Reset tx_busy
  * - Đặt last_rx_ms = HAL_GetTick() */
 void protocol_init(void)
 {
@@ -205,7 +209,6 @@ void protocol_init(void)
     rx_tail = 0u;
     line_length = 0u;
     line_overflow = 0u;
-    tx_busy = 0u;
     last_rx_ms = HAL_GetTick();
     has_rx = 0u;
 }
@@ -283,16 +286,14 @@ static long rpm_x10(float rpm)
 /* Gửi telemetry về host:
  * - Format: T,<t_ms>,<rpm_act x4>,<rpm_set x4>
  * - RPM nhân 10 để tránh printf float
- * - Nếu tx_busy: bỏ qua */
+ * - KHÔNG dùng HAL_UART_Transmit_IT: poll TXE rồi ghi DR để tránh kẹt tx_busy */
 void protocol_send_telemetry(uint32_t now_ms)
 {
     float actual[4];
     float target[4];
     int length;
-
-    if (tx_busy) {
-        return;
-    }
+    size_t i;
+    uint32_t start;
 
     control_get_actual_rpm(actual);
     control_get_target_rpm(target);
@@ -306,14 +307,18 @@ void protocol_send_telemetry(uint32_t now_ms)
         return;
     }
 
-    tx_busy = 1u;
-    if (HAL_UART_Transmit_IT(&huart2, (uint8_t *)tx_buffer, (uint16_t)length) != HAL_OK) {
-        tx_busy = 0u;
+    for (i = 0; i < (size_t)length; i++) {
+        start = HAL_GetTick();
+        while (!__HAL_UART_GET_FLAG(&huart2, UART_FLAG_TXE)) {
+            if ((uint32_t)(HAL_GetTick() - start) > 10u) {
+                return;
+            }
+        }
+        huart2.Instance->DR = (uint8_t)tx_buffer[i];
     }
 }
 
-/* Callback TX complete: đặt tx_busy = 0 */
+/* Không còn dùng ngắt TX complete; giữ hàm để tương thích với callback hiện hành. */
 void protocol_tx_complete(void)
 {
-    tx_busy = 0u;
 }

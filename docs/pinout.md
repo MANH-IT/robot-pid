@@ -300,8 +300,8 @@ Thứ tự bánh: **#1 = FL, #2 = FR, #3 = RL, #4 = RR**.
 
 ### 4.9 Timer và tần số PWM
 
-- HCLK = 72 MHz; TIM1, TIM2, TIM3, TIM4 đều nhận clock 72 MHz.
-- PWM: Prescaler = 0, ARR = 3599 ⇒ `72 MHz / 3600 = 20 kHz`.
+- HCLK = 64 MHz (HSI/2 × PLL16); TIM1, TIM2, TIM3, TIM4 đều nhận clock 64 MHz.
+- PWM: Prescaler = 0, ARR = 3199 ⇒ `64 MHz / 3200 = 20 kHz`.
 - TIM1 CH1–CH4 (PA8–PA11) → RPWM bánh 1–4.
 - TIM3 CH1–CH4 (PA6, PA7, PB0, PB1) → LPWM bánh 1–4.
 - TIM2/TIM4 ở encoder mode TI12 → encoder bánh 1 & 3 (x4).

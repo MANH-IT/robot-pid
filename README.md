@@ -23,10 +23,12 @@ Robot di động 4 bánh Mecanum điều khiển phân tầng:
 │   │   └── protocol.c/.h     # UART line protocol, telemetry
 │   └── platformio.ini
 ├── esp8266/                  # NodeMCU V3, cầu nối trong suốt TCP ↔ UART
-│   ├── src/main.cpp
+│   ├── src/main.cpp           # UART0 sau Serial.swap() (GPIO13/GPIO15)
+│   ├── src/secrets.example.h  # mẫu SSID/mật khẩu; secrets.h được gitignore
 │   └── platformio.ini
 ├── host/                     # Python 3 cho Laptop/PC
 │   ├── main.py               # GUI Tkinter hoặc chế độ monitor
+│   ├── web_control.py        # điều khiển qua trình duyệt (HTTP)
 │   ├── robot_host/
 │   │   ├── config.py
 │   │   ├── kinematics.py
@@ -35,6 +37,8 @@ Robot di động 4 bánh Mecanum điều khiển phân tầng:
 │   │   ├── link.py
 │   │   ├── serial_link.py
 │   │   ├── tcp_link.py       # WiFi TCP tới ESP8266
+│   │   ├── discovery.py      # dò ESP qua UDP broadcast (port 8266)
+│   │   ├── pulse.py          # tạo xung bậc thang/vuông cho tab XUNG
 │   │   ├── sim_link.py
 │   │   └── gui.py
 │   └── tests/

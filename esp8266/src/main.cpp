@@ -49,6 +49,13 @@ WiFiServer server(TCP_PORT);
 WiFiClient client;
 WiFiUDP udp;
 
+/* Theo dõi hoạt động của client TCP: nếu client BỊ TREO (không nhận/gửi byte
+ * nào trong CLIENT_IDLE_TIMEOUT_MS) thì gỡ client xuống và phục vụ client
+ * mới. Không dùng client.connected() đơn thuần vì TCP có thể treo không FIN
+ * khiến ESP không bao giờ nhận client mới (GUI đứng im nhưng connected). */
+#define CLIENT_IDLE_TIMEOUT_MS 10000u
+static uint32_t last_activity_ms;
+
 static char log_queue[LOG_QUEUE_LINES][LOG_LINE_MAX];
 static uint8_t log_head;
 static uint8_t log_count;
@@ -168,8 +175,18 @@ void loop() {
         if (newClient) {
             client = newClient;
             client.setNoDelay(true);
+            last_activity_ms = millis();
             log_flush();
             logf("[TCP] Client connected: %s", client.remoteIP().toString().c_str());
+        }
+    }
+
+    /* --- Gỡ client treo (không byte nào 2 chiều trong 10 s) --- */
+    if (client && client.connected()) {
+        if ((uint32_t)(millis() - last_activity_ms) > CLIENT_IDLE_TIMEOUT_MS) {
+            logf("[TCP] Client idle > %lus, dropped", CLIENT_IDLE_TIMEOUT_MS / 1000u);
+            client.stop();
+            client = WiFiClient();
         }
     }
 
@@ -186,6 +203,8 @@ void loop() {
         }
         if (n > 0u) {
             Serial.write(buf, n);
+            /* Ghi nhận activity để client sống còn không bị gỡ nhầm */
+            last_activity_ms = millis();
         }
     }
 
@@ -216,7 +235,16 @@ void loop() {
                     forward = 1u;
                 }
                 if (forward && client && client.connected()) {
-                    client.write((const uint8_t *)uart_line, uart_line_len);
+                    size_t written = client.write((const uint8_t *)uart_line, uart_line_len);
+                    if (written == 0u) {
+                        /* Ghi thất bại: host đã ngắt nhưng FIN chưa kịp tới
+                         * → gỡ client để host mới có thể vào sau. */
+                        logf("[TCP] Write to host failed, disconnect");
+                        client.stop();
+                        client = WiFiClient();
+                    } else {
+                        last_activity_ms = millis();
+                    }
                 }
                 uart_line_len = 0u;
                 uart_line_overflow = 0u;

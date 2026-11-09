@@ -4,7 +4,7 @@
 /* ============================================================
  * STM32F1xx HAL CONFIGURATION
  * - Cấu hình module HAL được bật cho STM32F103
- * - HSE 8 MHz, PLL x9 → 72 MHz
+ * - Clock dùng HSI nội 64 MHz (HSI/2 × PLL16); HSE_VALUE chỉ giữ để tham khảo
  * ============================================================ */
 
 #ifdef __cplusplus
