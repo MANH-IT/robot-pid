@@ -262,6 +262,10 @@ Dòng qua cầu chia ≈ 5 / 30 kΩ ≈ 0,167 mA
 
 Dùng CP2102/CH340 ở mức logic 3,3 V. Không nối 5 V TTL vào PA2/PA3.
 
+Khi nạp qua bootloader USART1 (`pio run -e bluepill_serial -t upload`), cần
+BOOT0=1, BOOT1=0 và TX→PA10, RX→PA9. **PA9/PA10 dùng chung với RPWM2/RPWM3**,
+nên phải ngắt 12 V động cơ và rút dây RPWM2/RPWM3 khỏi driver trước khi nạp.
+
 ### 4.8 Bảng chân STM32F103C8T6
 
 | Chân | Chức năng | Nối tới |

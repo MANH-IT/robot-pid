@@ -68,7 +68,7 @@ Tab **RPM trực tiếp** gửi 4 RPM riêng và chỉnh PID online.
 Tab **XUNG** phát xung bậc thang/xung vuông (biên độ, độ rộng, chu kỳ, số xung)
 cho một bánh hoặc cả 4 để đo đáp ứng PID realtime; tự dừng khi WASD/E-STOP/ẩn cửa sổ.
 Sau mỗi lần chạy, tab XUNG hiện **rise time / overshoot / settling / sai số xác lập**
-của pha ON đầu tiên và cho xuất CSV mẫu đáp ứng.
+của pha ON đầu tiên và **biểu đồ đích vs RPM thực** (bậc thang/vuông) ngay trên tab.
 Card **KẾT NỐI** có ô IP/port, nút **Dò ESP** (UDP broadcast) và **Kết nối lại** ngay
 trong app. Tab **NHẬT KÝ** lọc theo mức (Info/Cảnh báo/Lỗi), tự cuộn, copy và xuất
 toàn bộ telemetry ra CSV.
@@ -110,7 +110,17 @@ pio run
 pio run -t upload
 ```
 
-Dùng ST-Link. Nếu dùng USB-UART bootloader, đổi `upload_protocol` trong `platformio.ini`.
+Dùng ST-Link (mặc định). Nếu ST-Link báo `init mode failed`, nạp qua bootloader USART1:
+
+```bash
+pio run -e bluepill_serial -t upload
+```
+
+BOOT0=1, BOOT1=0; USB-TTL 3,3 V TX→PA10, RX→PA9, GND chung; sửa `upload_port`
+(COMx) trong `platformio.ini`. Xong gạt BOOT0=0 và reset.
+Nếu đã nối ST-Link `RST → R`, có thể thử `pio run -e bluepill_stlink_reset -t upload`
+(connect-under-reset) trước khi chuyển sang USB-TTL.
+**Ngắt 12 V động cơ và rút RPWM2/RPWM3** vì PA9/PA10 dùng chung với PWM 2 bánh.
 Telemetry của STM32 đi qua USART2 (PA2/PA3) tới ESP8266/USB-UART, không qua USB của Blue Pill.
 
 ### 4. Kiểm thử

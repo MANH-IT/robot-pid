@@ -53,6 +53,11 @@ static char log_queue[LOG_QUEUE_LINES][LOG_LINE_MAX];
 static uint8_t log_head;
 static uint8_t log_count;
 
+/* Bộ đệm lọc dòng UART -> TCP: chỉ chuyển tiếp dòng bắt đầu bằng 'T' hoặc 'V' */
+static char uart_line[256];
+static size_t uart_line_len;
+static uint8_t uart_line_overflow;
+
 /* ============================================================
  * LOG QUA TCP (không dùng Serial để tránh nhiễu đường UART)
  * ============================================================ */
@@ -92,7 +97,7 @@ static void logf(const char *fmt, ...)
  * ============================================================ */
 void setup() {
     /* --- UART0 dùng cho STM32: swap sang GPIO13 (RX) / GPIO15 (TX) --- */
-    Serial.begin(LINK_BAUD);
+    Serial.begin(LINK_BAUD, SERIAL_8N1, SERIAL_FULL);
     Serial.swap();
     /* Xóa byte rác có thể còn trong buffer RX lúc boot */
     while (Serial.available()) {
@@ -184,21 +189,38 @@ void loop() {
         }
     }
 
-    /* --- UART0 → TCP (telemetry từ STM32) --- */
+    /* --- UART0 → TCP (telemetry từ STM32), lọc bỏ ký tự rác --- */
     {
-        uint8_t buf[128];
-        size_t n = 0;
         while (Serial.available()) {
-            if (n == sizeof(buf)) {
-                if (client && client.connected()) {
-                    client.write(buf, n);
-                }
-                n = 0;
+            char c = (char)Serial.read();
+            if (c == '\r') {
+                continue;
             }
-            buf[n++] = (uint8_t)Serial.read();
-        }
-        if (n > 0u && client && client.connected()) {
-            client.write(buf, n);
+            if (uart_line_overflow) {
+                if (c == '\n') {
+                    uart_line_len = 0u;
+                    uart_line_overflow = 0u;
+                }
+                continue;
+            }
+            if (uart_line_len < sizeof(uart_line) - 1u) {
+                uart_line[uart_line_len++] = c;
+            } else {
+                uart_line_overflow = 1u;
+                continue;
+            }
+            if (c == '\n') {
+                uint8_t forward = 0u;
+                if (uart_line_len > 0u &&
+                    (uart_line[0] == 'T' || uart_line[0] == 'V')) {
+                    forward = 1u;
+                }
+                if (forward && client && client.connected()) {
+                    client.write((const uint8_t *)uart_line, uart_line_len);
+                }
+                uart_line_len = 0u;
+                uart_line_overflow = 0u;
+            }
         }
     }
 }

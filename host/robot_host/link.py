@@ -13,7 +13,6 @@ from .protocol import (
     format_ping,
     format_rpm,
     format_stop,
-    format_velocity,
 )
 
 

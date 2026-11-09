@@ -18,7 +18,26 @@ pip install platformio
 ```
 
 Board: `bluepill_f103c8`, framework `stm32cube`, clock 72 MHz từ HSE 8 MHz (PLL x9).
-Upload mặc định dùng ST-Link.
+Upload mặc định dùng ST-Link (`env:bluepill_f103c8`).
+
+### Nạp dự phòng qua USART1 (khi ST-Link báo `init mode failed`)
+
+```bash
+pio run -e bluepill_serial -t upload
+```
+
+Chuẩn bị: BOOT0=1, BOOT1=0; USB-TTL 3,3 V: TX→PA10, RX→PA9, GND chung; sửa
+`upload_port` trong `platformio.ini` đúng cổng COM. Nạp xong gạt BOOT0=0 và reset.
+
+> **Cảnh báo:** PA9/PA10 dùng chung với RPWM2/RPWM3 của BTS7960. Phải ngắt 12 V
+> động cơ và rút dây RPWM2/RPWM3 khỏi driver trước khi nạp, tránh bánh quay.
+
+Nếu OpenOCD báo `init mode failed` dù driver OK, thử nối ST-Link `RST → R` và nạp
+kiểu connect-under-reset:
+
+```bash
+pio run -e bluepill_stlink_reset -t upload
+```
 
 ## Cấu trúc thư mục
 

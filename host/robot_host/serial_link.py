@@ -59,6 +59,9 @@ class SerialLink(RobotLink):
                         self._update_telemetry(telemetry)
             except Exception as exc:
                 self._set_connected(False, str(exc))
+                # Mất kết nối: xóa target + xếp STOP để lần nối lại không
+                # phát lại lệnh cũ (giống TcpLink), tránh robot chạy tiếp.
+                self.stop()
             finally:
                 with self._serial_lock:
                     self._serial = None
@@ -82,6 +85,7 @@ class SerialLink(RobotLink):
                         ser.write(line.encode("ascii"))
                     except Exception as exc:
                         self._set_connected(False, str(exc))
+                        self.stop()
                     else:
                         self._commit_command(kind, expected_line=line)
             elapsed = time.monotonic() - started

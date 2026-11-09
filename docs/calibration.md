@@ -149,8 +149,8 @@ Khi đạt yêu cầu, cập nhật mặc định trong `firmware/src/control.c`
 Có thể dùng **Xung vuông** (ví dụ 1 Hz, duty 50%) để quan sát độ bám setpoint lặp lại
 và phát hiện trễ/overshoot trên biểu đồ RPM.
 Nếu mỗi bánh khác nhau, sửa vòng khởi tạo PID trong `control.c` để dùng gain riêng.
-Dùng **Xuất CSV xung** để lưu mẫu đáp ứng, hoặc **CSV telemetry** ở tab NHẬT KÝ để
-phân tích toàn bộ quá trình bằng công cụ ngoài.
+Biểu đồ **ĐÁP ỨNG XUNG** trên tab XUNG vẽ dạng xung đích và RPM thực của bánh đang
+chọn; dùng **CSV telemetry** ở tab NHẬT KÝ nếu cần phân tích toàn bộ quá trình.
 
 ## 5. Hiệu chuẩn odometry
 

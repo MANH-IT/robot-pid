@@ -79,6 +79,8 @@ class RobotGUI(object):
         self._pulse_on_duration = 0.0
         self._pulse_amplitude = 0.0
         self._pulse_metrics = None
+        self._pulse_plot = []
+        self._pulse_total = 0.0
         self._telemetry_log = deque(maxlen=60000)
         self._log_entries = deque(maxlen=3000)
         self._discover_running = False
@@ -918,9 +920,9 @@ class RobotGUI(object):
                 to=high,
                 increment=step,
                 textvariable=variable,
-                width=10,
+                width=9,
                 style="Dark.TSpinbox",
-            ).grid(row=row + 1, column=column + 1, sticky="w", padx=(6, 14), pady=3)
+            ).grid(row=row + 1, column=column + 1, sticky="w", padx=(6, 8), pady=3)
 
         actions = tk.Frame(body, bg=CARD)
         actions.grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
@@ -938,7 +940,22 @@ class RobotGUI(object):
             size=8,
             color=DIM,
             justify="left",
+            wraplength=320,
         ).grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+
+        chart_card, chart_body = self._card(parent, "ĐÁP ỨNG XUNG", "đích vs thực")
+        chart_card.pack(fill="x", pady=(0, 10))
+        self.pulse_canvas = tk.Canvas(
+            chart_body,
+            bg=CHART_BG,
+            highlightbackground=BORDER,
+            highlightthickness=1,
+            width=1,
+            height=160,
+            bd=0,
+        )
+        self.pulse_canvas.pack(fill="both", expand=True)
+        self.pulse_canvas.bind("<Configure>", lambda _event: self._draw_pulse_chart())
 
         status_card, status_body = self._card(parent, "TRẠNG THÁI XUNG", "10 ms")
         status_card.pack(fill="x")
@@ -946,19 +963,32 @@ class RobotGUI(object):
             status_body, "", size=9, mono=True, textvariable=self.pulse_status_var
         ).pack(anchor="w")
         self._label(
-            status_body, "", size=8, mono=True, color=MUTED, textvariable=self.pulse_live_var
+            status_body,
+            "",
+            size=8,
+            mono=True,
+            color=MUTED,
+            textvariable=self.pulse_live_var,
+            wraplength=320,
+            justify="left",
         ).pack(anchor="w", pady=(6, 0))
         self._label(
-            status_body, "", size=8, mono=True, color=TEXT, textvariable=self.pulse_metrics_var
+            status_body,
+            "",
+            size=8,
+            mono=True,
+            color=TEXT,
+            textvariable=self.pulse_metrics_var,
+            wraplength=320,
+            justify="left",
         ).pack(anchor="w", pady=(6, 0))
-        self._button(
-            status_body, "Xuất CSV xung", self._export_pulse_csv, size=8, padx=10, pady=4
-        ).pack(anchor="w", pady=(8, 0))
         self._label(
             status_body,
             "Biên độ dương = tiến, âm = lùi. Xem đáp ứng trên biểu đồ RPM.",
             size=8,
             color=DIM,
+            wraplength=320,
+            justify="left",
         ).pack(anchor="w", pady=(8, 0))
 
     def _build_log_tab(self, parent):
@@ -1203,11 +1233,14 @@ class RobotGUI(object):
         self._pulse_active = True
         self._pulse_phase_started = time.monotonic()
         self._pulse_samples = []
+        self._pulse_plot = []
+        self._pulse_total = sum(duration for _amplitude, duration in plan)
         self._pulse_on_start = self._pulse_phase_started
         self._pulse_on_duration = plan[0][1]
         self._pulse_amplitude = plan[0][0]
         self._pulse_metrics = None
         self.pulse_metrics_var.set("Đang đo đáp ứng...")
+        self._draw_pulse_chart()
         self._pulse_apply(plan[0][0])
         total = len(plan) // 2
         self.pulse_status_var.set("Đang chạy xung 1/%d · ON" % total)
@@ -1253,6 +1286,7 @@ class RobotGUI(object):
         self._pulse_apply(0.0)
         self.link.stop()
         self.pulse_status_var.set("Hoàn tất %d xung" % total)
+        self._draw_pulse_chart()
         self._log("Xung hoàn tất (%d xung)" % total)
 
     def _pulse_stop(self, status="Đã dừng", send_stop=True):
@@ -1269,6 +1303,7 @@ class RobotGUI(object):
             self.link.stop()
         if was_active:
             self._pulse_update_metrics()
+            self._draw_pulse_chart()
             self.pulse_status_var.set(status)
             self._log("Dừng xung", "warn")
 
@@ -1455,29 +1490,88 @@ class RobotGUI(object):
             return
         self._log("Đã lưu %s (%d mẫu)" % (path, len(self._telemetry_log)))
 
-    def _export_pulse_csv(self):
-        """Xuất mẫu đáp ứng của xung gần nhất ra CSV."""
-        if not self._pulse_samples:
-            self._log("Chưa có mẫu xung để xuất", "warn")
+    def _draw_pulse_chart(self):
+        """Vẽ dạng xung đích (bậc thang/vuông) và RPM thực của bánh đang chọn."""
+        canvas = self.pulse_canvas
+        canvas.delete("all")
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 40 or height < 40:
             return
-        path = filedialog.asksaveasfilename(
-            title="Lưu đáp ứng xung",
-            defaultextension=".csv",
-            filetypes=[("CSV", "*.csv")],
-            initialfile="pulse_response.csv",
+        left, right, top, bottom = 42, 10, 14, 22
+        plot_w = max(width - left - right, 10)
+        plot_h = max(height - top - bottom, 10)
+
+        if not self._pulse_plan:
+            canvas.create_text(
+                width / 2.0,
+                height / 2.0,
+                text="Bắt đầu xung để xem đáp ứng",
+                fill=DIM,
+                font=(self.font_family, 9),
+            )
+            return
+
+        total = max(self._pulse_total, 0.1)
+        limit = max(abs(self._pulse_amplitude), 10.0)
+        for _, _, value in self._pulse_plot:
+            limit = max(limit, abs(value))
+        limit *= 1.15
+
+        def x_of(t_value):
+            return left + min(max(t_value, 0.0), total) / total * plot_w
+
+        def y_of(rpm):
+            clipped = max(-limit, min(limit, rpm))
+            return top + (limit - clipped) / (2.0 * limit) * plot_h
+
+        for index in range(5):
+            x = left + index / 4.0 * plot_w
+            canvas.create_line(x, top, x, top + plot_h, fill=TROUGH)
+            canvas.create_text(
+                x,
+                top + plot_h + 4,
+                text="%.2fs" % (total * index / 4.0),
+                anchor="n",
+                fill=DIM,
+                font=(self.mono_family, 8),
+            )
+        for fraction in (0.0, 0.5, 1.0):
+            y = top + fraction * plot_h
+            canvas.create_line(left, y, left + plot_w, y, fill=BORDER)
+            canvas.create_text(
+                left - 4,
+                y,
+                text="%+.0f" % (limit * (1.0 - 2.0 * fraction)),
+                anchor="e",
+                fill=DIM,
+                font=(self.mono_family, 8),
+            )
+
+        target_points = []
+        cursor = 0.0
+        for amplitude, duration in self._pulse_plan:
+            target_points.extend((x_of(cursor), y_of(amplitude)))
+            cursor += duration
+            target_points.extend((x_of(cursor), y_of(amplitude)))
+        if len(target_points) >= 4:
+            canvas.create_line(*target_points, fill=YELLOW, width=2)
+
+        if len(self._pulse_plot) >= 2:
+            actual_points = []
+            for t_value, _target, actual in self._pulse_plot:
+                actual_points.extend((x_of(t_value), y_of(actual)))
+            canvas.create_line(*actual_points, fill=ACCENT, width=2)
+
+        canvas.create_rectangle(width - 100, 6, width - 8, 24, fill=CHART_BG, outline=BORDER)
+        canvas.create_line(width - 96, 15, width - 80, 15, fill=YELLOW, width=2)
+        canvas.create_text(
+            width - 76, 15, text="Đích", anchor="w", fill=MUTED, font=(self.font_family, 8)
         )
-        if not path:
-            return
-        try:
-            with open(path, "w", newline="", encoding="utf-8") as handle:
-                writer = csv.writer(handle)
-                writer.writerow(["t_s", "rpm_actual", "rpm_target"])
-                for t_value, rpm in self._pulse_samples:
-                    writer.writerow(["%.4f" % t_value, "%.3f" % rpm, "%.3f" % self._pulse_amplitude])
-        except OSError as exc:
-            self._log("Không ghi được CSV: %s" % exc, "error")
-            return
-        self._log("Đã lưu %s (%d mẫu)" % (path, len(self._pulse_samples)))
+        canvas.create_line(width - 50, 15, width - 34, 15, fill=ACCENT, width=2)
+        canvas.create_text(
+            width - 30, 15, text="Thực", anchor="w", fill=MUTED, font=(self.font_family, 8)
+        )
 
     def _draw_wheel_bar(self, index, actual, setpoint):
         """Vẽ thanh RPM cho bánh index"""
@@ -1646,9 +1740,14 @@ class RobotGUI(object):
                 self._last_telemetry_t = telemetry.t_ms
             if self._pulse_active:
                 elapsed = time.monotonic() - self._pulse_on_start
+                index = self._pulse_wheels()[0]
+                phase_target = (
+                    self._pulse_plan[self._pulse_index][0] if self._pulse_plan else 0.0
+                )
                 if elapsed <= self._pulse_on_duration + 0.05:
-                    index = self._pulse_wheels()[0]
                     self._pulse_samples.append((elapsed, actual[index]))
+                self._pulse_plot.append((elapsed, phase_target, actual[index]))
+                self._draw_pulse_chart()
         else:
             for index in range(4):
                 self.rpm_labels[index].configure(text="--")

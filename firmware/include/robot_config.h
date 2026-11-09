@@ -38,7 +38,7 @@
 
 /* PWM:
  * - ARR = 3599, prescaler = 0 → 72 MHz / 3600 = 20 kHz */
-#define PWM_TIM_ARR         3599u    /* 72 MHz / 20 kHz - 1 */
+#define PWM_TIM_ARR         3199u    /* 64 MHz (HSI) / 20 kHz - 1 */
 #define PWM_FREQUENCY_HZ    20000u
 
 /* PID:
